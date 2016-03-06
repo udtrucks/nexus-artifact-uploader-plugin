@@ -250,15 +250,9 @@ public class UploadArtifactsToNexus extends Builder implements Serializable{
 				return FormValidation.error("URL must not be empty");
 			}
 
-			if (value.startsWith("http://") && value.startsWith("https://")) {
+			if (value.startsWith("http://") || value.startsWith("https://")) {
 				return FormValidation.error("URL must not start with http:// or https://");
-			}
-
-			try {
-				new URL(value).toURI();
-			} catch (Exception e) {
-				return FormValidation.error(e.getMessage());
-			}
+			}		
 
 			return FormValidation.ok();
 		}
