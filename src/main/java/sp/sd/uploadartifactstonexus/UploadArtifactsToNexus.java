@@ -10,6 +10,8 @@ import hudson.tasks.Builder;
 import hudson.util.FormValidation;
 import hudson.util.Secret;
 import hudson.FilePath;
+import hudson.FilePath.FileCallable;
+import hudson.remoting.VirtualChannel;
 
 import net.sf.json.JSONObject;
 import org.kohsuke.stapler.DataBoundConstructor;
@@ -20,6 +22,7 @@ import javax.servlet.ServletException;
 import java.io.IOException;
 import java.net.URL;
 import java.io.File;
+import java.io.Serializable;
 import java.util.concurrent.TimeUnit;
 
 import org.apache.http.Consts;
@@ -40,7 +43,10 @@ import org.apache.http.HttpStatus;
 import org.jenkinsci.plugins.tokenmacro.MacroEvaluationException;
 import org.jenkinsci.plugins.tokenmacro.TokenMacro;
 
-public class UploadArtifactsToNexus extends Builder {
+import org.jenkinsci.remoting.RoleChecker;
+import org.jenkinsci.remoting.RoleSensitive;
+
+public class UploadArtifactsToNexus extends Builder implements Serializable{
 	private final String protocol;
 	private final String nexusUrl;
     private final String nexusUser;
@@ -116,11 +122,20 @@ public class UploadArtifactsToNexus extends Builder {
 			{
 				listener.getLogger().println(artifactFilePath.getName() + " file doesn't exists");
 				return false;
-			}			
-			try {
-				File artifactFile = new File(artifactFilePath.toURI());		
-				result = uploadToNexus(artifactFile, build, listener);			
-				
+			}		
+						
+			try {	
+				result = artifactFilePath.act(new ArtifactFileCallable(listener,
+							TokenMacro.expandAll(build, listener, nexusUser),
+							TokenMacro.expandAll(build, listener, Secret.toString(nexusPassword)),
+							TokenMacro.expandAll(build, listener, nexusUrl),
+							TokenMacro.expandAll(build, listener, groupId),
+							TokenMacro.expandAll(build, listener, artifactId),
+							TokenMacro.expandAll(build, listener, version),
+							TokenMacro.expandAll(build, listener, repository),
+							TokenMacro.expandAll(build, listener,packaging),
+							protocol
+				));
 			}
 			catch (Exception e) {
 				e.printStackTrace(listener.getLogger());
@@ -133,52 +148,85 @@ public class UploadArtifactsToNexus extends Builder {
 		}		
         return result;
     }
+	private static final class ArtifactFileCallable implements FileCallable<Boolean> {
+		private static final long serialVersionUID = 1;
 
-	public boolean uploadToNexus(File artifactFile, AbstractBuild build, BuildListener listener)
-	{
-		boolean result = false;
-		try(CloseableHttpClient httpClient = HttpClients.createDefault())
-		{			
-			HttpPost httpPost = new HttpPost(protocol + "://" + TokenMacro.expandAll(build, listener, nexusUser) + ":" + TokenMacro.expandAll(build, listener, Secret.toString(nexusPassword)) + "@" + TokenMacro.expandAll(build, listener, nexusUrl) + "/service/local/artifact/maven/content");
-			listener.getLogger().println("GroupId: " + TokenMacro.expandAll(build, listener, groupId));
-			listener.getLogger().println("ArtifactId: " + TokenMacro.expandAll(build, listener, artifactId));
-			listener.getLogger().println("Version: " + TokenMacro.expandAll(build, listener, version));
-			listener.getLogger().println("File: " + artifactFile.getName());
-			listener.getLogger().println("Repository:" + TokenMacro.expandAll(build, listener, repository));
+		private final BuildListener listener;
+		private final String resolvedNexusUser;
+		private final String resolvedNexusPassword;
+		private final String resolvedNexusUrl;
+		private final String resolvedGroupId;
+		private final String resolvedArtifactId;
+		private final String resolvedVersion;
+		private final String resolvedRepository;
+		private final String resolvedPackaging;
+		private final String resolvedProtocol;
+
+		public ArtifactFileCallable(BuildListener Listener, String ResolvedNexusUser, String ResolvedNexusPassword, String ResolvedNexusUrl, 
+										String ResolvedGroupId, String ResolvedArtifactId, String ResolvedVersion, String ResolvedRepository, String ResolvedPackaging, String ResolvedProtocol) {
+			this.listener = Listener;
+			this.resolvedNexusUser = ResolvedNexusUser;
+			this.resolvedNexusPassword = ResolvedNexusPassword;
+			this.resolvedNexusUrl = ResolvedNexusUrl;
+			this.resolvedGroupId = ResolvedGroupId;
+			this.resolvedArtifactId = ResolvedArtifactId;
+			this.resolvedVersion = ResolvedVersion;
+			this.resolvedRepository = ResolvedRepository;
+			this.resolvedPackaging = ResolvedPackaging;
+			this.resolvedProtocol = ResolvedProtocol;
+		}
+
+		@Override public Boolean invoke(File artifactFile, VirtualChannel channel) {
 			
-			listener.getLogger().println("Uploading artifact " + artifactFile.getName() + " started....");
-			FileBody artifactFileBody = new FileBody(artifactFile);
-			HttpEntity requestEntity = MultipartEntityBuilder.create()
-					.addPart("r", new StringBody(TokenMacro.expandAll(build, listener,repository), ContentType.TEXT_PLAIN))
-					.addPart("hasPom", new StringBody("false", ContentType.TEXT_PLAIN))
-					.addPart("e", new StringBody(TokenMacro.expandAll(build, listener,packaging), ContentType.TEXT_PLAIN))
-					.addPart("g", new StringBody(TokenMacro.expandAll(build, listener,groupId), ContentType.TEXT_PLAIN))
-					.addPart("a", new StringBody(TokenMacro.expandAll(build, listener,artifactId), ContentType.TEXT_PLAIN))
-					.addPart("v", new StringBody(TokenMacro.expandAll(build, listener,version), ContentType.TEXT_PLAIN))
-					.addPart("p", new StringBody(TokenMacro.expandAll(build, listener,packaging), ContentType.TEXT_PLAIN))
-					.addPart("file", artifactFileBody)
-					.build();
-			httpPost.setEntity(requestEntity);
-			try(CloseableHttpResponse response = httpClient.execute(httpPost))
-			{
-				int statusCode = response.getStatusLine().getStatusCode();
-				if(statusCode == HttpStatus.SC_CREATED)
+			boolean result = false;
+			try(CloseableHttpClient httpClient = HttpClients.createDefault())
+			{			
+				HttpPost httpPost = new HttpPost(resolvedProtocol + "://" + resolvedNexusUser + ":" + resolvedNexusPassword + "@" + resolvedNexusUrl + "/service/local/artifact/maven/content");
+				listener.getLogger().println("GroupId: " + resolvedGroupId);
+				listener.getLogger().println("ArtifactId: " + resolvedArtifactId);
+				listener.getLogger().println("Version: " + resolvedVersion);
+				listener.getLogger().println("File: " + artifactFile.getName());
+				listener.getLogger().println("Repository:" + resolvedRepository);
+				
+				listener.getLogger().println("Uploading artifact " + artifactFile.getName() + " started....");
+				FileBody artifactFileBody = new FileBody(artifactFile);
+				HttpEntity requestEntity = MultipartEntityBuilder.create()
+						.addPart("r", new StringBody(resolvedRepository, ContentType.TEXT_PLAIN))
+						.addPart("hasPom", new StringBody("false", ContentType.TEXT_PLAIN))
+						.addPart("e", new StringBody(resolvedPackaging, ContentType.TEXT_PLAIN))
+						.addPart("g", new StringBody(resolvedGroupId, ContentType.TEXT_PLAIN))
+						.addPart("a", new StringBody(resolvedArtifactId, ContentType.TEXT_PLAIN))
+						.addPart("v", new StringBody(resolvedVersion, ContentType.TEXT_PLAIN))
+						.addPart("p", new StringBody(resolvedPackaging, ContentType.TEXT_PLAIN))
+						.addPart("file", artifactFileBody)
+						.build();
+				httpPost.setEntity(requestEntity);
+				try(CloseableHttpResponse response = httpClient.execute(httpPost))
 				{
-					result = true;
-					listener.getLogger().println("Uploading artifact " + artifactFile.getName() + " completed.");
-				}
-				else
-				{
-					result = false;
+					int statusCode = response.getStatusLine().getStatusCode();
+					if(statusCode == HttpStatus.SC_CREATED)
+					{
+						result = true;
+						listener.getLogger().println("Uploading artifact " + artifactFile.getName() + " completed.");
+					}
+					else
+					{
+						result = false;
+					}
 				}
 			}
+			catch (Exception e)
+			{
+				e.printStackTrace(listener.getLogger());			
+			}
+			return result;	
 		}
-		catch (Exception e)
-		{
-			e.printStackTrace(listener.getLogger());			
-		}
-		return result;
+		
+		@Override  public void checkRoles(RoleChecker checker) throws SecurityException {
+                this.checkRoles(checker);
+            }		
 	}
+	
     
     @Override
     public DescriptorImpl getDescriptor() {
