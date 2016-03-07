@@ -40,9 +40,6 @@ import org.apache.http.HttpEntity;
 import org.apache.http.entity.ContentType;
 import org.apache.http.HttpStatus;
 
-import org.jenkinsci.plugins.tokenmacro.MacroEvaluationException;
-import org.jenkinsci.plugins.tokenmacro.TokenMacro;
-
 import org.jenkinsci.remoting.RoleChecker;
 import org.jenkinsci.remoting.RoleSensitive;
 
@@ -111,7 +108,7 @@ public class UploadArtifactsToNexus extends Builder implements Serializable{
 		boolean result = false;
 		try
 		{
-			FilePath artifactFilePath = new FilePath(build.getWorkspace(), TokenMacro.expandAll(build, listener, file));			
+			FilePath artifactFilePath = new FilePath(build.getWorkspace(), build.getEnvironment(listener).expand(file));			
 			try{
 				if(!artifactFilePath.exists())
 				{
@@ -126,14 +123,14 @@ public class UploadArtifactsToNexus extends Builder implements Serializable{
 						
 			try {	
 				result = artifactFilePath.act(new ArtifactFileCallable(listener,
-							TokenMacro.expandAll(build, listener, nexusUser),
-							TokenMacro.expandAll(build, listener, Secret.toString(nexusPassword)),
-							TokenMacro.expandAll(build, listener, nexusUrl),
-							TokenMacro.expandAll(build, listener, groupId),
-							TokenMacro.expandAll(build, listener, artifactId),
-							TokenMacro.expandAll(build, listener, version),
-							TokenMacro.expandAll(build, listener, repository),
-							TokenMacro.expandAll(build, listener,packaging),
+							build.getEnvironment(listener).expand(nexusUser),
+							build.getEnvironment(listener).expand(Secret.toString(nexusPassword)),
+							build.getEnvironment(listener).expand(nexusUrl),
+							build.getEnvironment(listener).expand(groupId),
+							build.getEnvironment(listener).expand(artifactId),
+							build.getEnvironment(listener).expand(version),
+							build.getEnvironment(listener).expand(repository),
+							build.getEnvironment(listener).expand(packaging),
 							protocol
 				));
 			}
