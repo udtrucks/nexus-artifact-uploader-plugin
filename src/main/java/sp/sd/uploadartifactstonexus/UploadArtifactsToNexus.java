@@ -12,6 +12,8 @@ import hudson.util.Secret;
 import hudson.FilePath;
 import hudson.FilePath.FileCallable;
 import hudson.remoting.VirtualChannel;
+import hudson.model.Action;
+import hudson.model.ProminentProjectAction;
 
 import net.sf.json.JSONObject;
 import org.kohsuke.stapler.DataBoundConstructor;
@@ -20,6 +22,8 @@ import org.kohsuke.stapler.QueryParameter;
 
 import javax.servlet.ServletException;
 import java.io.IOException;
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
 import java.net.URL;
 import java.io.File;
 import java.io.Serializable;
@@ -39,6 +43,7 @@ import org.apache.http.entity.mime.MultipartEntityBuilder;
 import org.apache.http.HttpEntity;
 import org.apache.http.entity.ContentType;
 import org.apache.http.HttpStatus;
+import org.apache.http.util.EntityUtils;
 
 import org.jenkinsci.remoting.RoleChecker;
 import org.jenkinsci.remoting.RoleSensitive;
@@ -133,6 +138,15 @@ public class UploadArtifactsToNexus extends Builder implements Serializable{
 							build.getEnvironment(listener).expand(packaging),
 							protocol
 				));
+				if(result) {
+					build.addAction(new LinkAction(build.getEnvironment(listener).expand(nexusUrl),
+							build.getEnvironment(listener).expand(groupId),
+							build.getEnvironment(listener).expand(artifactId),
+							build.getEnvironment(listener).expand(version),
+							build.getEnvironment(listener).expand(repository),
+							build.getEnvironment(listener).expand(packaging),
+							protocol, artifactFilePath.getName()));
+				}
 			}
 			catch (Exception e) {
 				e.printStackTrace(listener.getLogger());
@@ -183,7 +197,7 @@ public class UploadArtifactsToNexus extends Builder implements Serializable{
 				listener.getLogger().println("ArtifactId: " + resolvedArtifactId);
 				listener.getLogger().println("Version: " + resolvedVersion);
 				listener.getLogger().println("File: " + artifactFile.getName());
-				listener.getLogger().println("Repository:" + resolvedRepository);
+				listener.getLogger().println("Repository:" + resolvedRepository);				
 				
 				listener.getLogger().println("Uploading artifact " + artifactFile.getName() + " started....");
 				FileBody artifactFileBody = new FileBody(artifactFile);
@@ -194,8 +208,8 @@ public class UploadArtifactsToNexus extends Builder implements Serializable{
 						.addPart("g", new StringBody(resolvedGroupId, ContentType.TEXT_PLAIN))
 						.addPart("a", new StringBody(resolvedArtifactId, ContentType.TEXT_PLAIN))
 						.addPart("v", new StringBody(resolvedVersion, ContentType.TEXT_PLAIN))
-						.addPart("p", new StringBody(resolvedPackaging, ContentType.TEXT_PLAIN))
-						.addPart("file", artifactFileBody)
+						.addPart("p", new StringBody(resolvedPackaging, ContentType.TEXT_PLAIN))						
+						.addPart("file", artifactFileBody)						
 						.build();
 				httpPost.setEntity(requestEntity);
 				try(CloseableHttpResponse response = httpClient.execute(httpPost))
@@ -207,15 +221,20 @@ public class UploadArtifactsToNexus extends Builder implements Serializable{
 						listener.getLogger().println("Uploading artifact " + artifactFile.getName() + " completed.");
 					}
 					else
-					{
+					{	
+						listener.getLogger().println("Reason Phrase: " + response.getStatusLine().getReasonPhrase());
+						HttpEntity entity = response.getEntity();
+						String content = EntityUtils.toString(entity);
+						listener.getLogger().println(content);				
 						result = false;
-					}
+					}					
 				}
 			}
 			catch (Exception e)
 			{
 				e.printStackTrace(listener.getLogger());			
 			}
+			
 			return result;	
 		}
 		
@@ -224,6 +243,31 @@ public class UploadArtifactsToNexus extends Builder implements Serializable{
             }		
 	}
 	
+	public static final class LinkAction implements Action, ProminentProjectAction{
+        private final String name;
+        private final String url;
+        private final String icon;
+
+        public LinkAction(String ResolvedNexusUrl, 
+										String ResolvedGroupId, String ResolvedArtifactId, String ResolvedVersion, String ResolvedRepository, String ResolvedPackaging, String ResolvedProtocol, String Name){
+            this.name = Name;
+            this.url = ResolvedProtocol + "://" + ResolvedNexusUrl + "/service/local/repositories/" + ResolvedRepository + "/content/" + ResolvedGroupId.replace('.', '/') + "/" + ResolvedArtifactId + "/" + ResolvedVersion + "/" + ResolvedArtifactId + "-" + ResolvedVersion + "." + ResolvedPackaging;
+			this.icon = "package.gif";
+        }
+        public String getIconFileName() {
+            return icon;
+        }
+
+
+        public String getDisplayName() {
+            return name;
+        }
+
+        public String getUrlName() {
+            return url;
+        }
+
+    }    
     
     @Override
     public DescriptorImpl getDescriptor() {
