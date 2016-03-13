@@ -1,4 +1,4 @@
-package sp.sd.uploadartifactstonexus;
+package sp.sd.nexusartifactuploader;
 
 import hudson.Extension;
 import hudson.Launcher;
@@ -48,7 +48,7 @@ import org.apache.http.util.EntityUtils;
 import org.jenkinsci.remoting.RoleChecker;
 import org.jenkinsci.remoting.RoleSensitive;
 
-public class UploadArtifactsToNexus extends Builder implements Serializable{
+public class NexusArtifactUploader extends Builder implements Serializable{
 	private final String protocol;
 	private final String nexusUrl;
     private final String nexusUser;
@@ -62,7 +62,7 @@ public class UploadArtifactsToNexus extends Builder implements Serializable{
 
     // Fields in config.jelly must match the parameter names in the "DataBoundConstructor"
     @DataBoundConstructor
-    public UploadArtifactsToNexus(String protocol, String nexusUrl, String nexusUser, Secret nexusPassword, String groupId, 
+    public NexusArtifactUploader(String protocol, String nexusUrl, String nexusUser, Secret nexusPassword, String groupId, 
     		String artifactId, String version, String packaging, String repository, String file) {      
 		this.protocol = protocol;
 		this.nexusUrl = nexusUrl;
@@ -283,7 +283,7 @@ public class UploadArtifactsToNexus extends Builder implements Serializable{
 
         
         public String getDisplayName() {
-            return "Upload artifacts to nexus";
+            return "Upload artifact to nexus";
         }       
 
         public FormValidation doCheckNexusUrl(@QueryParameter String value) {
