@@ -120,7 +120,13 @@ public class NexusArtifactUploader extends Builder implements Serializable{
 					listener.getLogger().println(artifactFilePath.getName() + " file doesn't exists");
 					return false;
 				}
-			}catch(Exception e)
+			}
+			catch(RuntimeException e)
+			{
+				listener.getLogger().println(artifactFilePath.getName() + " file doesn't exists");
+				throw e;
+			}
+			catch(Exception e)
 			{
 				listener.getLogger().println(artifactFilePath.getName() + " file doesn't exists");
 				return false;
@@ -230,16 +236,21 @@ public class NexusArtifactUploader extends Builder implements Serializable{
 					}					
 				}
 			}
+			catch(RuntimeException e)
+			{
+				e.printStackTrace(listener.getLogger());
+				throw e;
+			}
 			catch (Exception e)
 			{
-				e.printStackTrace(listener.getLogger());			
+				e.printStackTrace(listener.getLogger());
 			}
 			
 			return result;	
 		}
 		
 		@Override  public void checkRoles(RoleChecker checker) throws SecurityException {
-                this.checkRoles(checker);
+                
             }		
 	}
 	
