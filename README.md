@@ -1,4 +1,4 @@
-# upload-artifacts-to-nexus-plugin
+# nexus-artifact-uploader
 
 This plugin goal is to upload artifacts generated from non-maven projects to Sonatype Nexus.
 Used the REST API of the Nexus to upload a multi-part form POST to /service/local/artifact/maven/content.
