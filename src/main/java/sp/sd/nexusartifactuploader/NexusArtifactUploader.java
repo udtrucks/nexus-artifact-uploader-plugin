@@ -48,6 +48,8 @@ import org.apache.http.util.EntityUtils;
 import org.jenkinsci.remoting.RoleChecker;
 import org.jenkinsci.remoting.RoleSensitive;
 
+import com.google.common.base.Strings;
+
 public class NexusArtifactUploader extends Builder implements Serializable{
 	private final String protocol;
 	private final String nexusUrl;
@@ -198,6 +200,10 @@ public class NexusArtifactUploader extends Builder implements Serializable{
 			boolean result = false;
 			try(CloseableHttpClient httpClient = HttpClients.createDefault())
 			{			
+				if(Strings.isNullOrEmpty(resolvedNexusUrl)) {
+					listener.getLogger().println("Url of the Nexus is empty. Please enter Nexus Url.");
+					return false;
+				}
 				HttpPost httpPost = new HttpPost(resolvedProtocol + "://" + resolvedNexusUser + ":" + resolvedNexusPassword + "@" + resolvedNexusUrl + "/service/local/artifact/maven/content");
 				listener.getLogger().println("GroupId: " + resolvedGroupId);
 				listener.getLogger().println("ArtifactId: " + resolvedArtifactId);
@@ -238,11 +244,13 @@ public class NexusArtifactUploader extends Builder implements Serializable{
 			}
 			catch(RuntimeException e)
 			{
+				listener.getLogger().println(e.getMessage());
 				e.printStackTrace(listener.getLogger());
 				throw e;
 			}
 			catch (Exception e)
 			{
+				listener.getLogger().println(e.getMessage());
 				e.printStackTrace(listener.getLogger());
 			}
 			
