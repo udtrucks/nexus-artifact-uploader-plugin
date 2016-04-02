@@ -1,42 +1,48 @@
 package sp.sd.nexusartifactuploader;
 
+import hudson.EnvVars;
 import hudson.Extension;
 import hudson.Launcher;
 import hudson.model.BuildListener;
 import hudson.model.AbstractBuild;
 import hudson.model.AbstractProject;
+import hudson.model.Run;
+import hudson.security.ACL;
+import hudson.security.AccessControlled;
 import hudson.tasks.BuildStepDescriptor;
 import hudson.tasks.Builder;
+import hudson.util.CopyOnWriteList;
 import hudson.util.FormValidation;
 import hudson.util.Secret;
+import hudson.util.ListBoxModel;
 import hudson.FilePath;
 import hudson.FilePath.FileCallable;
 import hudson.remoting.VirtualChannel;
 import hudson.model.Action;
+import hudson.model.Item;
+import hudson.model.ItemGroup;
 import hudson.model.ProminentProjectAction;
-
 import net.sf.json.JSONObject;
+
+import org.kohsuke.stapler.AncestorInPath;
 import org.kohsuke.stapler.DataBoundConstructor;
-import org.kohsuke.stapler.StaplerRequest;
 import org.kohsuke.stapler.QueryParameter;
+import org.kohsuke.stapler.export.Model;
 
-import javax.servlet.ServletException;
-import java.io.IOException;
-import java.io.BufferedReader;
-import java.io.InputStreamReader;
-import java.net.URL;
 import java.io.File;
+import java.io.IOException;
 import java.io.Serializable;
-import java.util.concurrent.TimeUnit;
+import java.util.Collections;
 
-import org.apache.http.Consts;
-import org.apache.http.NameValuePair;
-import org.apache.http.client.entity.UrlEncodedFormEntity;
+import javax.annotation.Nonnull;
+import javax.security.auth.login.CredentialNotFoundException;
+
+import jenkins.model.Jenkins;
+
 import org.apache.http.client.methods.CloseableHttpResponse;
 import org.apache.http.client.methods.HttpPost;
 import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.impl.client.HttpClients;
-import org.apache.http.message.BasicNameValuePair;
 import org.apache.http.entity.mime.content.FileBody;
 import org.apache.http.entity.mime.content.StringBody;
 import org.apache.http.entity.mime.MultipartEntityBuilder;
@@ -44,54 +50,72 @@ import org.apache.http.HttpEntity;
 import org.apache.http.entity.ContentType;
 import org.apache.http.HttpStatus;
 import org.apache.http.util.EntityUtils;
-
 import org.jenkinsci.remoting.RoleChecker;
-import org.jenkinsci.remoting.RoleSensitive;
 
+import com.cloudbees.plugins.credentials.Credentials;
+import com.cloudbees.plugins.credentials.CredentialsMatchers;
+import com.cloudbees.plugins.credentials.CredentialsNameProvider;
+import com.cloudbees.plugins.credentials.CredentialsProvider;
+import com.cloudbees.plugins.credentials.common.AbstractIdCredentialsListBoxModel;
+import com.cloudbees.plugins.credentials.common.IdCredentials;
+import com.cloudbees.plugins.credentials.common.StandardCredentials;
+import com.cloudbees.plugins.credentials.common.StandardUsernameCredentials;
+import com.cloudbees.plugins.credentials.common.StandardUsernameListBoxModel;
+import com.cloudbees.plugins.credentials.common.StandardUsernamePasswordCredentials;
+import com.cloudbees.plugins.credentials.domains.DomainRequirement;
+import com.cloudbees.plugins.credentials.domains.URIRequirementBuilder;
 import com.google.common.base.Strings;
 
-public class NexusArtifactUploader extends Builder implements Serializable{
+import edu.umd.cs.findbugs.annotations.NonNull;
+
+public class NexusArtifactUploader extends Builder implements Serializable{	
+	private static final long serialVersionUID = 1;
+	
 	private final String protocol;
 	private final String nexusUrl;
-    private final String nexusUser;
-    private final Secret nexusPassword;
-    private final String groupId;
-    private final String artifactId;
-    private final String version;
-    private final String packaging;
+	private final String nexusUser;
+	private final Secret nexusPassword;
+	private final String groupId;
+	private final String artifactId;
+	private final String version;
+	private final String packaging;
 	private final String repository;
 	private final String file;
-
-    // Fields in config.jelly must match the parameter names in the "DataBoundConstructor"
-    @DataBoundConstructor
-    public NexusArtifactUploader(String protocol, String nexusUrl, String nexusUser, Secret nexusPassword, String groupId, 
-    		String artifactId, String version, String packaging, String repository, String file) {      
+	
+	private final String credentialsId;	
+	 
+	
+	// Fields in config.jelly must match the parameter names in the "DataBoundConstructor"
+	@DataBoundConstructor
+	public NexusArtifactUploader(String protocol, String nexusUrl, String nexusUser, Secret nexusPassword, String groupId, 
+			String artifactId, String version, String packaging, String repository, String file, String credentialsId) {      
 		this.protocol = protocol;
 		this.nexusUrl = nexusUrl;
 		this.nexusUser = nexusUser;
 		this.nexusPassword = nexusPassword;
 		this.groupId = groupId;
-        this.artifactId = artifactId;
-        this.version = version;
-        this.packaging = packaging;
+		this.artifactId = artifactId;
+		this.version = version;
+		this.packaging = packaging;
 		this.repository = repository;
-		this.file = file;
-    }
-	
+		this.file = file;		
+		this.credentialsId =  credentialsId;	
+	}
+
 	public String getProtocol() {
 		return protocol;
 	}
 
-    public String getNexusUrl() {
+	public String getNexusUrl() {
 		return nexusUrl;
-	}
+	}	
 	public String getNexusUser() {
 		return nexusUser;
 	}
 	public Secret getNexusPassword() {
 		return nexusPassword;
 	}
-    public String getGroupId() {
+	public String getGroupId() {
 		return groupId;
 	}
 	public String getArtifactId() {
@@ -109,12 +133,65 @@ public class NexusArtifactUploader extends Builder implements Serializable{
 	public String getFile() {
 		return file;
 	}
+	public final String getCredentialsId() {
+        return credentialsId;
+    }
+		
+	public StandardUsernameCredentials getCredentials() {		
+		StandardUsernameCredentials credentials = null;
+        try {
+            
+        	credentials = credentialsId == null ? null : this.lookupSystemCredentials(credentialsId);
+            if (credentials != null) {               	
+                return credentials;
+            }
+        } catch (Throwable t) {
+            
+        }       
 
-    @Override
-    public boolean perform(AbstractBuild build, Launcher launcher, BuildListener listener) {  
+        return credentials;
+    }
+	
+	 public static StandardUsernameCredentials lookupSystemCredentials(String credentialsId) {
+	        return CredentialsMatchers.firstOrNull(
+	                CredentialsProvider
+	                        .lookupCredentials(StandardUsernameCredentials.class, Jenkins.getInstance(), ACL.SYSTEM, Collections.<DomainRequirement>emptyList()),
+	                CredentialsMatchers.withId(credentialsId)
+	        );
+	    } 
+	
+	 public String getUsername(EnvVars environment) {	        
+	        String Username = null;
+	        if(nexusUser == null) {
+	        	Username = "";
+	        }else {
+	        	Username = environment.expand(nexusUser);
+	        }
+	        if (credentialsId != null) {
+	        	Username = this.getCredentials().getUsername();
+	        }
+	        return Username;
+	    }
+	 
+	    public String getPassword(EnvVars environment) {
+	        String Password = null;
+	        if (nexusPassword == null) {
+	        	Password = "";
+	        } else {
+	        	Password = environment.expand(Secret.toString(nexusPassword));
+	        } 
+	        if (credentialsId != null) {
+	        	Password = Secret.toString(StandardUsernamePasswordCredentials.class.cast(this.getCredentials()).getPassword());
+	        }
+	        return Password;
+	    }
+
+
+	@Override
+	public boolean perform(AbstractBuild build, Launcher launcher, BuildListener listener) {  
 		boolean result = false;
 		try
-		{
+		{				
 			FilePath artifactFilePath = new FilePath(build.getWorkspace(), build.getEnvironment(listener).expand(file));			
 			try{
 				if(!artifactFilePath.exists())
@@ -133,11 +210,11 @@ public class NexusArtifactUploader extends Builder implements Serializable{
 				listener.getLogger().println(artifactFilePath.getName() + " file doesn't exists");
 				return false;
 			}		
-						
+
 			try {	
-				result = artifactFilePath.act(new ArtifactFileCallable(listener,
-							build.getEnvironment(listener).expand(nexusUser),
-							build.getEnvironment(listener).expand(Secret.toString(nexusPassword)),
+					result = artifactFilePath.act(new ArtifactFileCallable(listener,
+							this.getUsername(build.getEnvironment(listener)),
+							this.getPassword(build.getEnvironment(listener)),
 							build.getEnvironment(listener).expand(nexusUrl),
 							build.getEnvironment(listener).expand(groupId),
 							build.getEnvironment(listener).expand(artifactId),
@@ -145,16 +222,7 @@ public class NexusArtifactUploader extends Builder implements Serializable{
 							build.getEnvironment(listener).expand(repository),
 							build.getEnvironment(listener).expand(packaging),
 							protocol
-				));
-				if(result) {
-					build.addAction(new LinkAction(build.getEnvironment(listener).expand(nexusUrl),
-							build.getEnvironment(listener).expand(groupId),
-							build.getEnvironment(listener).expand(artifactId),
-							build.getEnvironment(listener).expand(version),
-							build.getEnvironment(listener).expand(repository),
-							build.getEnvironment(listener).expand(packaging),
-							protocol, artifactFilePath.getName()));
-				}
+							));				
 			}
 			catch (Exception e) {
 				e.printStackTrace(listener.getLogger());
@@ -165,10 +233,10 @@ public class NexusArtifactUploader extends Builder implements Serializable{
 		{
 			e.printStackTrace(listener.getLogger());
 		}		
-        return result;
-    }
+		return result;
+	}
 	private static final class ArtifactFileCallable implements FileCallable<Boolean> {
-		private static final long serialVersionUID = 1;
+		
 
 		private final BuildListener listener;
 		private final String resolvedNexusUser;
@@ -182,7 +250,7 @@ public class NexusArtifactUploader extends Builder implements Serializable{
 		private final String resolvedProtocol;
 
 		public ArtifactFileCallable(BuildListener Listener, String ResolvedNexusUser, String ResolvedNexusPassword, String ResolvedNexusUrl, 
-										String ResolvedGroupId, String ResolvedArtifactId, String ResolvedVersion, String ResolvedRepository, String ResolvedPackaging, String ResolvedProtocol) {
+				String ResolvedGroupId, String ResolvedArtifactId, String ResolvedVersion, String ResolvedRepository, String ResolvedPackaging, String ResolvedProtocol) {
 			this.listener = Listener;
 			this.resolvedNexusUser = ResolvedNexusUser;
 			this.resolvedNexusPassword = ResolvedNexusPassword;
@@ -196,7 +264,7 @@ public class NexusArtifactUploader extends Builder implements Serializable{
 		}
 
 		@Override public Boolean invoke(File artifactFile, VirtualChannel channel) {
-			
+
 			boolean result = false;
 			try(CloseableHttpClient httpClient = HttpClients.createDefault())
 			{			
@@ -210,7 +278,7 @@ public class NexusArtifactUploader extends Builder implements Serializable{
 				listener.getLogger().println("Version: " + resolvedVersion);
 				listener.getLogger().println("File: " + artifactFile.getName());
 				listener.getLogger().println("Repository:" + resolvedRepository);				
-				
+
 				listener.getLogger().println("Uploading artifact " + artifactFile.getName() + " started....");
 				FileBody artifactFileBody = new FileBody(artifactFile);
 				HttpEntity requestEntity = MultipartEntityBuilder.create()
@@ -253,59 +321,59 @@ public class NexusArtifactUploader extends Builder implements Serializable{
 				listener.getLogger().println(e.getMessage());
 				e.printStackTrace(listener.getLogger());
 			}
-			
+
 			return result;	
 		}
-		
+
 		@Override  public void checkRoles(RoleChecker checker) throws SecurityException {
-                
-            }		
-	}
+
+		}		
+	}	
 	
+
 	public static final class LinkAction implements Action, ProminentProjectAction{
-        private final String name;
-        private final String url;
-        private final String icon;
+		private final String name;
+		private final String url;
+		private final String icon;
 
-        public LinkAction(String ResolvedNexusUrl, 
-										String ResolvedGroupId, String ResolvedArtifactId, String ResolvedVersion, String ResolvedRepository, String ResolvedPackaging, String ResolvedProtocol, String Name){
-            this.name = Name;
-            this.url = ResolvedProtocol + "://" + ResolvedNexusUrl + "/service/local/repositories/" + ResolvedRepository + "/content/" + ResolvedGroupId.replace('.', '/') + "/" + ResolvedArtifactId + "/" + ResolvedVersion + "/" + ResolvedArtifactId + "-" + ResolvedVersion + "." + ResolvedPackaging;
+		public LinkAction(String ResolvedNexusUrl, 
+				String ResolvedGroupId, String ResolvedArtifactId, String ResolvedVersion, String ResolvedRepository, String ResolvedPackaging, String ResolvedProtocol, String Name){
+			this.name = Name;
+			this.url = ResolvedProtocol + "://" + ResolvedNexusUrl + "/service/local/repositories/" + ResolvedRepository + "/content/" + ResolvedGroupId.replace('.', '/') + "/" + ResolvedArtifactId + "/" + ResolvedVersion + "/" + ResolvedArtifactId + "-" + ResolvedVersion + "." + ResolvedPackaging;
 			this.icon = "package.gif";
-        }
-        public String getIconFileName() {
-            return icon;
-        }
+		}
+		public String getIconFileName() {
+			return icon;
+		}
 
 
-        public String getDisplayName() {
-            return name;
-        }
+		public String getDisplayName() {
+			return name;
+		}
 
-        public String getUrlName() {
-            return url;
-        }
+		public String getUrlName() {
+			return url;
+		}
 
-    }    
-    
-    @Override
-    public DescriptorImpl getDescriptor() {
-        return (DescriptorImpl)super.getDescriptor();
-    }
-    
-    @Extension 
-    public static final class DescriptorImpl extends BuildStepDescriptor<Builder> {
+	}    
 
-        public boolean isApplicable(Class<? extends AbstractProject> aClass) {            
-            return true;
-        }
+	@Override
+	public DescriptorImpl getDescriptor() {
+		return (DescriptorImpl)super.getDescriptor();
+	}
 
-        
-        public String getDisplayName() {
-            return "Upload artifact to nexus";
-        }       
+	@Extension 
+	public static final class DescriptorImpl<C extends StandardCredentials> extends BuildStepDescriptor<Builder> {
 
-        public FormValidation doCheckNexusUrl(@QueryParameter String value) {
+		public boolean isApplicable(Class<? extends AbstractProject> aClass) {            
+			return true;
+		}
+
+		public String getDisplayName() {
+			return "Upload artifact to nexus";
+		}       
+
+		public FormValidation doCheckNexusUrl(@QueryParameter String value) {
 			if (value.length() == 0) {
 				return FormValidation.error("URL must not be empty");
 			}
@@ -316,48 +384,56 @@ public class NexusArtifactUploader extends Builder implements Serializable{
 
 			return FormValidation.ok();
 		}
-		
+
 		public FormValidation doCheckGroupId(@QueryParameter String value) {
 			if (value.length() == 0) {
 				return FormValidation.error("GroupId must not be empty");
 			}
 			return FormValidation.ok();
 		}
-		
+
 		public FormValidation doCheckArtifactId(@QueryParameter String value) {
 			if (value.length() == 0) {
 				return FormValidation.error("ArtifactId must not be empty");
 			}
 			return FormValidation.ok();
 		}
-		
+
 		public FormValidation doCheckVersion(@QueryParameter String value) {
 			if (value.length() == 0) {
 				return FormValidation.error("Version must not be empty");
 			}
 			return FormValidation.ok();
 		}
-		
+
 		public FormValidation doCheckPackaging(@QueryParameter String value) {
 			if (value.length() == 0) {
 				return FormValidation.error("Packaging must not be empty");
 			}
 			return FormValidation.ok();
 		}
-		
+
 		public FormValidation doCheckRepository(@QueryParameter String value) {
 			if (value.length() == 0) {
 				return FormValidation.error("Repository must not be empty");
 			}
 			return FormValidation.ok();
 		}
-		
+
 		public FormValidation doCheckFile(@QueryParameter String value) {
 			if (value.length() == 0) {
 				return FormValidation.error("File must not be empty");
 			}
 			return FormValidation.ok();
-		}
-    }
+		}	
+		
+		public ListBoxModel doFillCredentialsIdItems(@AncestorInPath Item owner) {
+	        if (owner == null || !owner.hasPermission(Item.CONFIGURE)) {
+	            return new ListBoxModel();
+	        }	        
+	        return new StandardUsernameListBoxModel().withAll(CredentialsProvider.lookupCredentials(StandardUsernamePasswordCredentials.class, owner, ACL.SYSTEM, Collections.<DomainRequirement>emptyList()));
+	    }	
+	}
+	
 }
 
