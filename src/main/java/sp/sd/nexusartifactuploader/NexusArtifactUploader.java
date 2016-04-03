@@ -34,7 +34,9 @@ import java.io.IOException;
 import java.io.Serializable;
 import java.util.Collections;
 
+import javax.annotation.CheckForNull;
 import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
 import javax.security.auth.login.CredentialNotFoundException;
 
 import jenkins.model.Jenkins;
@@ -82,7 +84,7 @@ public class NexusArtifactUploader extends Builder implements Serializable{
 	private final String repository;
 	private final String file;
 	
-	private final String credentialsId;	
+	private final @CheckForNull String credentialsId;	
 	 
 	
 	// Fields in config.jelly must match the parameter names in the "DataBoundConstructor"
@@ -133,7 +135,7 @@ public class NexusArtifactUploader extends Builder implements Serializable{
 	public String getFile() {
 		return file;
 	}
-	public final String getCredentialsId() {
+	public @Nullable String getCredentialsId() {
         return credentialsId;
     }
 		
@@ -162,12 +164,12 @@ public class NexusArtifactUploader extends Builder implements Serializable{
 	
 	 public String getUsername(EnvVars environment) {	        
 	        String Username = null;
-	        if(nexusUser == null) {
+	        if(Strings.isNullOrEmpty(nexusUser)) {
 	        	Username = "";
 	        }else {
 	        	Username = environment.expand(nexusUser);
 	        }
-	        if (credentialsId != null) {
+	        if (!Strings.isNullOrEmpty(credentialsId)) {
 	        	Username = this.getCredentials().getUsername();
 	        }
 	        return Username;
@@ -180,7 +182,7 @@ public class NexusArtifactUploader extends Builder implements Serializable{
 	        } else {
 	        	Password = environment.expand(Secret.toString(nexusPassword));
 	        } 
-	        if (credentialsId != null) {
+	        if (!Strings.isNullOrEmpty(credentialsId)) {
 	        	Password = Secret.toString(StandardUsernamePasswordCredentials.class.cast(this.getCredentials()).getPassword());
 	        }
 	        return Password;
@@ -431,7 +433,7 @@ public class NexusArtifactUploader extends Builder implements Serializable{
 	        if (owner == null || !owner.hasPermission(Item.CONFIGURE)) {
 	            return new ListBoxModel();
 	        }	        
-	        return new StandardUsernameListBoxModel().withAll(CredentialsProvider.lookupCredentials(StandardUsernamePasswordCredentials.class, owner, ACL.SYSTEM, Collections.<DomainRequirement>emptyList()));
+	        return new StandardUsernameListBoxModel().withEmptySelection().withAll(CredentialsProvider.lookupCredentials(StandardUsernamePasswordCredentials.class, owner, ACL.SYSTEM, Collections.<DomainRequirement>emptyList()));
 	    }	
 	}
 	
