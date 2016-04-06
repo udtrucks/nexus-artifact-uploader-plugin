@@ -6,12 +6,9 @@ import hudson.Launcher;
 import hudson.model.BuildListener;
 import hudson.model.AbstractBuild;
 import hudson.model.AbstractProject;
-import hudson.model.Run;
 import hudson.security.ACL;
-import hudson.security.AccessControlled;
 import hudson.tasks.BuildStepDescriptor;
 import hudson.tasks.Builder;
-import hudson.util.CopyOnWriteList;
 import hudson.util.FormValidation;
 import hudson.util.Secret;
 import hudson.util.ListBoxModel;
@@ -20,55 +17,47 @@ import hudson.FilePath.FileCallable;
 import hudson.remoting.VirtualChannel;
 import hudson.model.Action;
 import hudson.model.Item;
-import hudson.model.ItemGroup;
 import hudson.model.ProminentProjectAction;
-import net.sf.json.JSONObject;
-
 import org.kohsuke.stapler.AncestorInPath;
 import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.QueryParameter;
-import org.kohsuke.stapler.export.Model;
-
 import java.io.File;
-import java.io.IOException;
 import java.io.Serializable;
+import java.net.URI;
 import java.util.Collections;
-
 import javax.annotation.CheckForNull;
-import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
-import javax.security.auth.login.CredentialNotFoundException;
-
 import jenkins.model.Jenkins;
-
+import org.apache.http.auth.AuthScope;
+import org.apache.http.auth.UsernamePasswordCredentials;
+import org.apache.http.client.AuthCache;
 import org.apache.http.client.methods.CloseableHttpResponse;
 import org.apache.http.client.methods.HttpPost;
+import org.apache.http.client.protocol.HttpClientContext;
+import org.apache.http.impl.auth.BasicScheme;
+import org.apache.http.impl.client.BasicAuthCache;
+import org.apache.http.impl.client.BasicCredentialsProvider;
 import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.impl.client.HttpClients;
+import org.apache.http.impl.client.LaxRedirectStrategy;
 import org.apache.http.entity.mime.content.FileBody;
 import org.apache.http.entity.mime.content.StringBody;
 import org.apache.http.entity.mime.MultipartEntityBuilder;
 import org.apache.http.HttpEntity;
+import org.apache.http.HttpHost;
 import org.apache.http.entity.ContentType;
 import org.apache.http.HttpStatus;
 import org.apache.http.util.EntityUtils;
 import org.jenkinsci.remoting.RoleChecker;
-
-import com.cloudbees.plugins.credentials.Credentials;
 import com.cloudbees.plugins.credentials.CredentialsMatchers;
-import com.cloudbees.plugins.credentials.CredentialsNameProvider;
 import com.cloudbees.plugins.credentials.CredentialsProvider;
-import com.cloudbees.plugins.credentials.common.AbstractIdCredentialsListBoxModel;
-import com.cloudbees.plugins.credentials.common.IdCredentials;
 import com.cloudbees.plugins.credentials.common.StandardCredentials;
 import com.cloudbees.plugins.credentials.common.StandardUsernameCredentials;
 import com.cloudbees.plugins.credentials.common.StandardUsernameListBoxModel;
 import com.cloudbees.plugins.credentials.common.StandardUsernamePasswordCredentials;
 import com.cloudbees.plugins.credentials.domains.DomainRequirement;
-import com.cloudbees.plugins.credentials.domains.URIRequirementBuilder;
 import com.google.common.base.Strings;
 
-import edu.umd.cs.findbugs.annotations.NonNull;
 
 public class NexusArtifactUploader extends Builder implements Serializable{	
 	private static final long serialVersionUID = 1;
@@ -268,13 +257,30 @@ public class NexusArtifactUploader extends Builder implements Serializable{
 		@Override public Boolean invoke(File artifactFile, VirtualChannel channel) {
 
 			boolean result = false;
-			try(CloseableHttpClient httpClient = HttpClients.createDefault())
+			
+			
+			
+			try
 			{			
 				if(Strings.isNullOrEmpty(resolvedNexusUrl)) {
 					listener.getLogger().println("Url of the Nexus is empty. Please enter Nexus Url.");
 					return false;
 				}
-				HttpPost httpPost = new HttpPost(resolvedProtocol + "://" + resolvedNexusUser + ":" + resolvedNexusPassword + "@" + resolvedNexusUrl + "/service/local/artifact/maven/content");
+				
+				URI Url = new URI(resolvedProtocol + "://" + resolvedNexusUrl + "/service/local/artifact/maven/content");
+				HttpHost host = new HttpHost(Url.getHost(), Url.getPort(), Url.getScheme());
+				BasicCredentialsProvider credsProvider = new BasicCredentialsProvider();
+				credsProvider.setCredentials(new AuthScope(Url.getHost(), Url.getPort()), new UsernamePasswordCredentials(resolvedNexusUser, resolvedNexusPassword));				
+				AuthCache authCache = new BasicAuthCache();				
+				BasicScheme basicAuth = new BasicScheme();
+				authCache.put(host, basicAuth);
+				
+				HttpClientContext localContext = HttpClientContext.create();
+				localContext.setAuthCache(authCache);
+				
+				CloseableHttpClient httpClient = HttpClients.custom().setDefaultCredentialsProvider(credsProvider).build();
+				
+				HttpPost httpPost = new HttpPost(resolvedProtocol + "://" + resolvedNexusUrl + "/service/local/artifact/maven/content");
 				listener.getLogger().println("GroupId: " + resolvedGroupId);
 				listener.getLogger().println("ArtifactId: " + resolvedArtifactId);
 				listener.getLogger().println("Version: " + resolvedVersion);
@@ -294,7 +300,7 @@ public class NexusArtifactUploader extends Builder implements Serializable{
 						.addPart("file", artifactFileBody)						
 						.build();
 				httpPost.setEntity(requestEntity);
-				try(CloseableHttpResponse response = httpClient.execute(httpPost))
+				try(CloseableHttpResponse response = httpClient.execute(host, httpPost, localContext))
 				{
 					int statusCode = response.getStatusLine().getStatusCode();
 					if(statusCode == HttpStatus.SC_CREATED)
