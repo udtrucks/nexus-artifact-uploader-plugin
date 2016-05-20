@@ -1,46 +1,48 @@
-package sp.sd.nexusartifactuploader;
+package sp.sd.nexusartifactuploader.steps;
 
-import hudson.EnvVars;
-import hudson.Extension;
-import hudson.Launcher;
-import hudson.model.*;
-import hudson.security.ACL;
-import hudson.tasks.BuildStepDescriptor;
-import hudson.tasks.Builder;
-import hudson.util.FormValidation;
-import hudson.util.Secret;
-import hudson.util.ListBoxModel;
-import hudson.FilePath;
-import hudson.FilePath.FileCallable;
-import hudson.remoting.VirtualChannel;
-import jenkins.MasterToSlaveFileCallable;
-import jenkins.tasks.SimpleBuildStep;
-import org.kohsuke.stapler.AncestorInPath;
-import org.kohsuke.stapler.DataBoundConstructor;
-import org.kohsuke.stapler.QueryParameter;
+/**
+ * Created by suresh on 5/19/2016.
+ */
 
-import java.io.File;
-import java.io.IOException;
-import java.io.Serializable;
-import java.util.Collections;
-import javax.annotation.CheckForNull;
-import javax.annotation.Nullable;
-
-import jenkins.model.Jenkins;
-import org.jenkinsci.remoting.RoleChecker;
 import com.cloudbees.plugins.credentials.CredentialsMatchers;
 import com.cloudbees.plugins.credentials.CredentialsProvider;
-import com.cloudbees.plugins.credentials.common.StandardCredentials;
 import com.cloudbees.plugins.credentials.common.StandardUsernameCredentials;
 import com.cloudbees.plugins.credentials.common.StandardUsernameListBoxModel;
 import com.cloudbees.plugins.credentials.common.StandardUsernamePasswordCredentials;
 import com.cloudbees.plugins.credentials.domains.DomainRequirement;
 import com.google.common.base.Strings;
+import hudson.*;
 
+import javax.annotation.CheckForNull;
+import javax.annotation.Nullable;
+import javax.inject.Inject;
 
-public class NexusArtifactUploader extends Builder implements SimpleBuildStep, Serializable {
-    private static final long serialVersionUID = 1;
+import hudson.model.Item;
+import hudson.model.Run;
+import hudson.model.TaskListener;
+import hudson.remoting.VirtualChannel;
+import hudson.security.ACL;
+import hudson.util.FormValidation;
+import hudson.util.ListBoxModel;
+import hudson.util.Secret;
+import jenkins.MasterToSlaveFileCallable;
+import jenkins.model.Jenkins;
+import org.jenkinsci.plugins.workflow.steps.AbstractStepDescriptorImpl;
+import org.jenkinsci.plugins.workflow.steps.AbstractStepImpl;
+import org.jenkinsci.plugins.workflow.steps.AbstractSynchronousNonBlockingStepExecution;
+import org.jenkinsci.plugins.workflow.steps.StepContextParameter;
+import org.jenkinsci.remoting.RoleChecker;
+import org.kohsuke.stapler.AncestorInPath;
+import org.kohsuke.stapler.DataBoundConstructor;
+import org.kohsuke.stapler.DataBoundSetter;
+import org.kohsuke.stapler.QueryParameter;
+import sp.sd.nexusartifactuploader.Utils;
 
+import java.io.File;
+import java.io.IOException;
+import java.util.Collections;
+
+public final class NexusArtifactUploaderStep extends AbstractStepImpl {
     private final String protocol;
     private final String nexusUrl;
     private final String nexusUser;
@@ -51,15 +53,13 @@ public class NexusArtifactUploader extends Builder implements SimpleBuildStep, S
     private final String packaging;
     private final String repository;
     private final String file;
-
     private final
     @CheckForNull
     String credentialsId;
 
-    // Fields in config.jelly must match the parameter names in the "DataBoundConstructor"
     @DataBoundConstructor
-    public NexusArtifactUploader(String protocol, String nexusUrl, String nexusUser, Secret nexusPassword, String groupId,
-                                 String artifactId, String version, String packaging, String repository, String file, String credentialsId) {
+    public NexusArtifactUploaderStep(String protocol, String nexusUrl, String nexusUser, Secret nexusPassword, String groupId,
+                                     String artifactId, String version, String packaging, String repository, String file, String credentialsId) {
         this.protocol = protocol;
         this.nexusUrl = nexusUrl;
         this.nexusUser = nexusUser;
@@ -168,117 +168,21 @@ public class NexusArtifactUploader extends Builder implements SimpleBuildStep, S
         return Password;
     }
 
-
-    @Override
-    public void perform(Run build, FilePath workspace, Launcher launcher, TaskListener listener) throws IOException, InterruptedException {
-        boolean result = false;
-        EnvVars envVars = build.getEnvironment(listener);
-        FilePath artifactFilePath = new FilePath(workspace, build.getEnvironment(listener).expand(file));
-
-        if (!artifactFilePath.exists()) {
-            listener.getLogger().println(artifactFilePath.getName() + " file doesn't exists");
-            throw new IOException(artifactFilePath.getName() + " file doesn't exists");
-        }
-        else {
-            result = artifactFilePath.act(new ArtifactFileCallable(listener,
-                    this.getUsername(envVars),
-                    this.getPassword(envVars),
-                    envVars.expand(nexusUrl),
-                    envVars.expand(groupId),
-                    envVars.expand(artifactId),
-                    envVars.expand(version),
-                    envVars.expand(repository),
-                    envVars.expand(packaging),
-                    protocol
-            ));
-        }
-        if (!result) {
-            build.setResult(Result.FAILURE);
-        }
-    }
-
-    private static final class ArtifactFileCallable extends MasterToSlaveFileCallable<Boolean> {
-
-        private final TaskListener listener;
-        private final String resolvedNexusUser;
-        private final String resolvedNexusPassword;
-        private final String resolvedNexusUrl;
-        private final String resolvedGroupId;
-        private final String resolvedArtifactId;
-        private final String resolvedVersion;
-        private final String resolvedRepository;
-        private final String resolvedPackaging;
-        private final String resolvedProtocol;
-
-        public ArtifactFileCallable(TaskListener Listener, String ResolvedNexusUser, String ResolvedNexusPassword, String ResolvedNexusUrl,
-                                    String ResolvedGroupId, String ResolvedArtifactId, String ResolvedVersion,
-                                    String ResolvedRepository, String ResolvedPackaging, String ResolvedProtocol) {
-            this.listener = Listener;
-            this.resolvedNexusUser = ResolvedNexusUser;
-            this.resolvedNexusPassword = ResolvedNexusPassword;
-            this.resolvedNexusUrl = ResolvedNexusUrl;
-            this.resolvedGroupId = ResolvedGroupId;
-            this.resolvedArtifactId = ResolvedArtifactId;
-            this.resolvedVersion = ResolvedVersion;
-            this.resolvedRepository = ResolvedRepository;
-            this.resolvedPackaging = ResolvedPackaging;
-            this.resolvedProtocol = ResolvedProtocol;
-        }
-
-        @Override
-        public Boolean invoke(File artifactFile, VirtualChannel channel) throws IOException {
-            return Utils.uploadArtifact(artifactFile, listener, resolvedNexusUser, resolvedNexusPassword, resolvedNexusUrl,
-                    resolvedGroupId, resolvedArtifactId, resolvedVersion, resolvedRepository, resolvedPackaging, resolvedProtocol);
-        }
-
-        @Override
-        public void checkRoles(RoleChecker checker) throws SecurityException {
-
-        }
-    }
-
-
-    public static final class LinkAction implements Action, ProminentProjectAction {
-        private final String name;
-        private final String url;
-        private final String icon;
-
-        public LinkAction(String ResolvedNexusUrl,
-                          String ResolvedGroupId, String ResolvedArtifactId, String ResolvedVersion, String ResolvedRepository, String ResolvedPackaging, String ResolvedProtocol, String Name) {
-            this.name = Name;
-            this.url = ResolvedProtocol + "://" + ResolvedNexusUrl + "/service/local/repositories/" + ResolvedRepository + "/content/" + ResolvedGroupId.replace('.', '/') + "/" + ResolvedArtifactId + "/" + ResolvedVersion + "/" + ResolvedArtifactId + "-" + ResolvedVersion + "." + ResolvedPackaging;
-            this.icon = "package.gif";
-        }
-
-        public String getIconFileName() {
-            return icon;
-        }
-
-
-        public String getDisplayName() {
-            return name;
-        }
-
-        public String getUrlName() {
-            return url;
-        }
-
-    }
-
-    @Override
-    public DescriptorImpl getDescriptor() {
-        return (DescriptorImpl) super.getDescriptor();
-    }
-
     @Extension
-    public static final class DescriptorImpl<C extends StandardCredentials> extends BuildStepDescriptor<Builder> {
+    public static final class DescriptorImpl extends AbstractStepDescriptorImpl {
 
-        public boolean isApplicable(Class<? extends AbstractProject> aClass) {
-            return true;
+        public DescriptorImpl() {
+            super(Execution.class);
         }
 
+        @Override
+        public String getFunctionName() {
+            return "nexusArtifactUploader";
+        }
+
+        @Override
         public String getDisplayName() {
-            return "Upload artifact to nexus";
+            return "Nexus non-maven artifacts uploader";
         }
 
         public FormValidation doCheckNexusUrl(@QueryParameter String value) {
@@ -343,5 +247,87 @@ public class NexusArtifactUploader extends Builder implements SimpleBuildStep, S
         }
     }
 
-}
+    public static final class Execution extends AbstractSynchronousNonBlockingStepExecution<Boolean> {
+        @Inject
+        private transient NexusArtifactUploaderStep step;
 
+        @StepContextParameter
+        private transient TaskListener listener;
+
+        @StepContextParameter
+        private transient FilePath ws;
+
+        @StepContextParameter
+        private transient Run build;
+
+        @StepContextParameter
+        private transient Launcher launcher;
+
+        @Override
+        protected Boolean run() throws Exception {
+            Boolean result = false;
+            EnvVars envVars = build.getEnvironment(listener);
+            FilePath artifactFilePath = new FilePath(ws, build.getEnvironment(listener).expand(step.getFile()));
+            if (!artifactFilePath.exists()) {
+                listener.getLogger().println(artifactFilePath.getName() + " file doesn't exists");
+                throw new IOException(artifactFilePath.getName() + " file doesn't exists");
+            }
+            else {
+                result = artifactFilePath.act(new ArtifactFileCallable(listener,
+                        step.getUsername(envVars),
+                        step.getPassword(envVars),
+                        envVars.expand(step.getNexusUrl()),
+                        envVars.expand(step.getGroupId()),
+                        envVars.expand(step.getArtifactId()),
+                        envVars.expand(step.getVersion()),
+                        envVars.expand(step.getRepository()),
+                        envVars.expand(step.getPackaging()),
+                        step.getProtocol()
+                ));
+            }
+            return result;
+        }
+        private static final long serialVersionUID = 1L;
+    }
+
+    private static final class ArtifactFileCallable extends MasterToSlaveFileCallable<Boolean> {
+
+        private final TaskListener listener;
+        private final String resolvedNexusUser;
+        private final String resolvedNexusPassword;
+        private final String resolvedNexusUrl;
+        private final String resolvedGroupId;
+        private final String resolvedArtifactId;
+        private final String resolvedVersion;
+        private final String resolvedRepository;
+        private final String resolvedPackaging;
+        private final String resolvedProtocol;
+
+        public ArtifactFileCallable(TaskListener Listener, String ResolvedNexusUser, String ResolvedNexusPassword,
+                                    String ResolvedNexusUrl, String ResolvedGroupId, String ResolvedArtifactId,
+                                    String ResolvedVersion, String ResolvedRepository, String ResolvedPackaging,
+                                    String ResolvedProtocol) {
+            this.listener = Listener;
+            this.resolvedNexusUser = ResolvedNexusUser;
+            this.resolvedNexusPassword = ResolvedNexusPassword;
+            this.resolvedNexusUrl = ResolvedNexusUrl;
+            this.resolvedGroupId = ResolvedGroupId;
+            this.resolvedArtifactId = ResolvedArtifactId;
+            this.resolvedVersion = ResolvedVersion;
+            this.resolvedRepository = ResolvedRepository;
+            this.resolvedPackaging = ResolvedPackaging;
+            this.resolvedProtocol = ResolvedProtocol;
+        }
+
+        @Override
+        public Boolean invoke(File artifactFile, VirtualChannel channel) throws IOException {
+            return Utils.uploadArtifact(artifactFile, listener, resolvedNexusUser, resolvedNexusPassword, resolvedNexusUrl,
+                    resolvedGroupId, resolvedArtifactId, resolvedVersion, resolvedRepository, resolvedPackaging, resolvedProtocol);
+        }
+
+        @Override
+        public void checkRoles(RoleChecker checker) throws SecurityException {
+
+        }
+    }
+}
