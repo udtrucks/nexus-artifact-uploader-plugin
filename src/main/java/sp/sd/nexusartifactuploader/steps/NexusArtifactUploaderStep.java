@@ -46,7 +46,7 @@ public final class NexusArtifactUploaderStep extends AbstractStepImpl {
     private final String protocol;
     private final String nexusUrl;
     private final String nexusUser;
-    private final Secret nexusPassword;
+    private final String nexusPassword;
     private final String groupId;
     private final String artifactId;
     private final String version;
@@ -58,12 +58,12 @@ public final class NexusArtifactUploaderStep extends AbstractStepImpl {
     String credentialsId;
 
     @DataBoundConstructor
-    public NexusArtifactUploaderStep(String protocol, String nexusUrl, String nexusUser, Secret nexusPassword, String groupId,
+    public NexusArtifactUploaderStep(String protocol, String nexusUrl, String nexusUser, String nexusPassword, String groupId,
                                      String artifactId, String version, String packaging, String repository, String file, String credentialsId) {
         this.protocol = protocol;
         this.nexusUrl = nexusUrl;
         this.nexusUser = nexusUser;
-        this.nexusPassword = nexusPassword;
+        this.nexusPassword = Secret.fromString(nexusPassword).getEncryptedValue();
         this.groupId = groupId;
         this.artifactId = artifactId;
         this.version = version;
@@ -85,8 +85,8 @@ public final class NexusArtifactUploaderStep extends AbstractStepImpl {
         return nexusUser;
     }
 
-    public Secret getNexusPassword() {
-        return nexusPassword;
+    public String getNexusPassword() {
+        return Secret.decrypt(nexusPassword).getPlainText();
     }
 
     public String getGroupId() {
@@ -160,7 +160,7 @@ public final class NexusArtifactUploaderStep extends AbstractStepImpl {
         if (nexusPassword == null) {
             Password = "";
         } else {
-            Password = environment.expand(Secret.toString(nexusPassword));
+            Password = environment.expand(Secret.decrypt(nexusPassword).getPlainText());
         }
         if (!Strings.isNullOrEmpty(credentialsId)) {
             Password = Secret.toString(StandardUsernamePasswordCredentials.class.cast(this.getCredentials()).getPassword());
