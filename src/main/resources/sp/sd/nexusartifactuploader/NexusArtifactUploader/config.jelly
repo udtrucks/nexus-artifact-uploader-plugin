@@ -31,6 +31,12 @@
 		<f:entry title="Packaging" field="packaging">
 			<f:textbox />
 		</f:entry>
+		<f:entry title="Type" field="type">
+			<f:textbox />
+		</f:entry>
+		<f:entry title="Classifier" field="classifier">
+			<f:textbox />
+		</f:entry>
 		<f:entry title="Repository" field="repository">
 			<f:textbox />
 		</f:entry>

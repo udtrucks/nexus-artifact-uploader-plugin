@@ -49,6 +49,8 @@ public class NexusArtifactUploader extends Builder implements SimpleBuildStep, S
     private final String artifactId;
     private final String version;
     private final String packaging;
+    private final String type;
+    private final String classifier;
     private final String repository;
     private final String file;
 
@@ -59,7 +61,8 @@ public class NexusArtifactUploader extends Builder implements SimpleBuildStep, S
     // Fields in config.jelly must match the parameter names in the "DataBoundConstructor"
     @DataBoundConstructor
     public NexusArtifactUploader(String protocol, String nexusUrl, String nexusUser, Secret nexusPassword, String groupId,
-                                 String artifactId, String version, String packaging, String repository, String file, String credentialsId) {
+                                 String artifactId, String version, String packaging, String type, String classifier,
+                                 String repository, String file, String credentialsId) {
         this.protocol = protocol;
         this.nexusUrl = nexusUrl;
         this.nexusUser = nexusUser;
@@ -68,6 +71,8 @@ public class NexusArtifactUploader extends Builder implements SimpleBuildStep, S
         this.artifactId = artifactId;
         this.version = version;
         this.packaging = packaging;
+        this.type = type;
+        this.classifier = classifier;
         this.repository = repository;
         this.file = file;
         this.credentialsId = credentialsId;
@@ -103,6 +108,14 @@ public class NexusArtifactUploader extends Builder implements SimpleBuildStep, S
 
     public String getPackaging() {
         return packaging;
+    }
+
+    public String getType() {
+        return type;
+    }
+
+    public String getClassifier() {
+        return classifier;
     }
 
     public String getRepository() {
@@ -189,6 +202,8 @@ public class NexusArtifactUploader extends Builder implements SimpleBuildStep, S
                     envVars.expand(version),
                     envVars.expand(repository),
                     envVars.expand(packaging),
+                    envVars.expand(type),
+                    envVars.expand(classifier),
                     protocol
             ));
         }
@@ -208,11 +223,14 @@ public class NexusArtifactUploader extends Builder implements SimpleBuildStep, S
         private final String resolvedVersion;
         private final String resolvedRepository;
         private final String resolvedPackaging;
+        private final String resolvedType;
+        private final String resolvedClassifier;
         private final String resolvedProtocol;
 
         public ArtifactFileCallable(TaskListener Listener, String ResolvedNexusUser, String ResolvedNexusPassword, String ResolvedNexusUrl,
                                     String ResolvedGroupId, String ResolvedArtifactId, String ResolvedVersion,
-                                    String ResolvedRepository, String ResolvedPackaging, String ResolvedProtocol) {
+                                    String ResolvedRepository, String ResolvedPackaging, String ResolvedType, String ResolvedClassifier,
+                                    String ResolvedProtocol) {
             this.listener = Listener;
             this.resolvedNexusUser = ResolvedNexusUser;
             this.resolvedNexusPassword = ResolvedNexusPassword;
@@ -222,13 +240,16 @@ public class NexusArtifactUploader extends Builder implements SimpleBuildStep, S
             this.resolvedVersion = ResolvedVersion;
             this.resolvedRepository = ResolvedRepository;
             this.resolvedPackaging = ResolvedPackaging;
+            this.resolvedType = ResolvedType;
+            this.resolvedClassifier = ResolvedClassifier;
             this.resolvedProtocol = ResolvedProtocol;
         }
 
         @Override
         public Boolean invoke(File artifactFile, VirtualChannel channel) throws IOException {
             return Utils.uploadArtifact(artifactFile, listener, resolvedNexusUser, resolvedNexusPassword, resolvedNexusUrl,
-                    resolvedGroupId, resolvedArtifactId, resolvedVersion, resolvedRepository, resolvedPackaging, resolvedProtocol);
+                    resolvedGroupId, resolvedArtifactId, resolvedVersion, resolvedRepository, resolvedPackaging, resolvedType, resolvedClassifier,
+                    resolvedProtocol);
         }
 
         @Override
@@ -244,9 +265,10 @@ public class NexusArtifactUploader extends Builder implements SimpleBuildStep, S
         private final String icon;
 
         public LinkAction(String ResolvedNexusUrl,
-                          String ResolvedGroupId, String ResolvedArtifactId, String ResolvedVersion, String ResolvedRepository, String ResolvedPackaging, String ResolvedProtocol, String Name) {
+                          String ResolvedGroupId, String ResolvedArtifactId, String ResolvedVersion, String ResolvedRepository, String ResolvedPackaging, 
+                          String ResolvedType, String ResolvedClassifier, String ResolvedProtocol, String Name) {
             this.name = Name;
-            this.url = ResolvedProtocol + "://" + ResolvedNexusUrl + "/service/local/repositories/" + ResolvedRepository + "/content/" + ResolvedGroupId.replace('.', '/') + "/" + ResolvedArtifactId + "/" + ResolvedVersion + "/" + ResolvedArtifactId + "-" + ResolvedVersion + "." + ResolvedPackaging;
+            this.url = ResolvedProtocol + "://" + ResolvedNexusUrl + "/service/local/repositories/" + ResolvedRepository + "/content/" + ResolvedGroupId.replace('.', '/') + "/" + ResolvedArtifactId + "/" + ResolvedVersion + "/" + ResolvedArtifactId + "-" + ResolvedVersion + "." + ResolvedType;
             this.icon = "package.gif";
         }
 
@@ -311,6 +333,14 @@ public class NexusArtifactUploader extends Builder implements SimpleBuildStep, S
             if (value.length() == 0) {
                 return FormValidation.error("Version must not be empty");
             }
+            return FormValidation.ok();
+        }
+
+        public FormValidation doCheckType(@QueryParameter String value) {
+            return FormValidation.ok();
+        }
+
+        public FormValidation doCheckClassifier(@QueryParameter String value) {
             return FormValidation.ok();
         }
 
