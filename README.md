@@ -17,4 +17,6 @@ v - version
 
 p - packaging
 
+c - classifier (optional)
+
 file - each file to be uploaded, use one file parameter per file.
