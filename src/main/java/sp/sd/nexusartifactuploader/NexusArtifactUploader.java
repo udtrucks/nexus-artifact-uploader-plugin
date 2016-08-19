@@ -119,11 +119,11 @@ public class NexusArtifactUploader extends Builder implements SimpleBuildStep, S
         return credentialsId;
     }
 
-    public StandardUsernameCredentials getCredentials() {
+    public StandardUsernameCredentials getCredentials(Item project) {
         StandardUsernameCredentials credentials = null;
         try {
 
-            credentials = credentialsId == null ? null : this.lookupSystemCredentials(credentialsId);
+            credentials = credentialsId == null ? null : this.lookupSystemCredentials(credentialsId, project);
             if (credentials != null) {
                 return credentials;
             }
@@ -134,15 +134,15 @@ public class NexusArtifactUploader extends Builder implements SimpleBuildStep, S
         return credentials;
     }
 
-    public static StandardUsernameCredentials lookupSystemCredentials(String credentialsId) {
+    public static StandardUsernameCredentials lookupSystemCredentials(String credentialsId, Item project) {
         return CredentialsMatchers.firstOrNull(
                 CredentialsProvider
-                        .lookupCredentials(StandardUsernameCredentials.class, Jenkins.getInstance(), ACL.SYSTEM, Collections.<DomainRequirement>emptyList()),
+                        .lookupCredentials(StandardUsernameCredentials.class, project, ACL.SYSTEM, Collections.<DomainRequirement>emptyList()),
                 CredentialsMatchers.withId(credentialsId)
         );
     }
 
-    public String getUsername(EnvVars environment) {
+    public String getUsername(EnvVars environment, Item project) {
         String Username = null;
         if (Strings.isNullOrEmpty(nexusUser)) {
             Username = "";
@@ -150,12 +150,12 @@ public class NexusArtifactUploader extends Builder implements SimpleBuildStep, S
             Username = environment.expand(nexusUser);
         }
         if (!Strings.isNullOrEmpty(credentialsId)) {
-            Username = this.getCredentials().getUsername();
+            Username = this.getCredentials(project).getUsername();
         }
         return Username;
     }
 
-    public String getPassword(EnvVars environment) {
+    public String getPassword(EnvVars environment, Item project) {
         String Password = null;
         if (nexusPassword == null) {
             Password = "";
@@ -163,7 +163,7 @@ public class NexusArtifactUploader extends Builder implements SimpleBuildStep, S
             Password = environment.expand(Secret.toString(nexusPassword));
         }
         if (!Strings.isNullOrEmpty(credentialsId)) {
-            Password = Secret.toString(StandardUsernamePasswordCredentials.class.cast(this.getCredentials()).getPassword());
+            Password = Secret.toString(StandardUsernamePasswordCredentials.class.cast(this.getCredentials(project)).getPassword());
         }
         return Password;
     }
@@ -174,15 +174,15 @@ public class NexusArtifactUploader extends Builder implements SimpleBuildStep, S
         boolean result = false;
         EnvVars envVars = build.getEnvironment(listener);
         FilePath artifactFilePath = new FilePath(workspace, build.getEnvironment(listener).expand(file));
-
+        Item project = build.getParent();
         if (!artifactFilePath.exists()) {
             listener.getLogger().println(artifactFilePath.getName() + " file doesn't exists");
             throw new IOException(artifactFilePath.getName() + " file doesn't exists");
         }
         else {
             result = artifactFilePath.act(new ArtifactFileCallable(listener,
-                    this.getUsername(envVars),
-                    this.getPassword(envVars),
+                    this.getUsername(envVars, project),
+                    this.getPassword(envVars, project),
                     envVars.expand(nexusUrl),
                     envVars.expand(groupId),
                     envVars.expand(artifactId),

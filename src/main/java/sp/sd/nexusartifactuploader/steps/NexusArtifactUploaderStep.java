@@ -17,6 +17,7 @@ import javax.annotation.CheckForNull;
 import javax.annotation.Nullable;
 import javax.inject.Inject;
 
+import hudson.model.AbstractProject;
 import hudson.model.Item;
 import hudson.model.Run;
 import hudson.model.TaskListener;
@@ -119,11 +120,11 @@ public final class NexusArtifactUploaderStep extends AbstractStepImpl {
         return credentialsId;
     }
 
-    public StandardUsernameCredentials getCredentials() {
+    public StandardUsernameCredentials getCredentials(Item project) {
         StandardUsernameCredentials credentials = null;
         try {
 
-            credentials = credentialsId == null ? null : this.lookupSystemCredentials(credentialsId);
+            credentials = credentialsId == null ? null : this.lookupSystemCredentials(credentialsId, project);
             if (credentials != null) {
                 return credentials;
             }
@@ -134,15 +135,15 @@ public final class NexusArtifactUploaderStep extends AbstractStepImpl {
         return credentials;
     }
 
-    public static StandardUsernameCredentials lookupSystemCredentials(String credentialsId) {
+    public static StandardUsernameCredentials lookupSystemCredentials(String credentialsId, Item project) {
         return CredentialsMatchers.firstOrNull(
                 CredentialsProvider
-                        .lookupCredentials(StandardUsernameCredentials.class, Jenkins.getInstance(), ACL.SYSTEM, Collections.<DomainRequirement>emptyList()),
+                        .lookupCredentials(StandardUsernameCredentials.class, project, ACL.SYSTEM, Collections.<DomainRequirement>emptyList()),
                 CredentialsMatchers.withId(credentialsId)
         );
     }
 
-    public String getUsername(EnvVars environment) {
+    public String getUsername(EnvVars environment, Item project) {
         String Username = null;
         if (Strings.isNullOrEmpty(nexusUser)) {
             Username = "";
@@ -150,12 +151,12 @@ public final class NexusArtifactUploaderStep extends AbstractStepImpl {
             Username = environment.expand(nexusUser);
         }
         if (!Strings.isNullOrEmpty(credentialsId)) {
-            Username = this.getCredentials().getUsername();
+            Username = this.getCredentials(project).getUsername();
         }
         return Username;
     }
 
-    public String getPassword(EnvVars environment) {
+    public String getPassword(EnvVars environment, Item project) {
         String Password = null;
         if (nexusPassword == null) {
             Password = "";
@@ -163,7 +164,7 @@ public final class NexusArtifactUploaderStep extends AbstractStepImpl {
             Password = environment.expand(Secret.decrypt(nexusPassword).getPlainText());
         }
         if (!Strings.isNullOrEmpty(credentialsId)) {
-            Password = Secret.toString(StandardUsernamePasswordCredentials.class.cast(this.getCredentials()).getPassword());
+            Password = Secret.toString(StandardUsernamePasswordCredentials.class.cast(this.getCredentials(project)).getPassword());
         }
         return Password;
     }
@@ -266,6 +267,7 @@ public final class NexusArtifactUploaderStep extends AbstractStepImpl {
         @Override
         protected Boolean run() throws Exception {
             Boolean result = false;
+            Item project = build.getParent();
             EnvVars envVars = build.getEnvironment(listener);
             FilePath artifactFilePath = new FilePath(ws, build.getEnvironment(listener).expand(step.getFile()));
             if (!artifactFilePath.exists()) {
@@ -274,8 +276,8 @@ public final class NexusArtifactUploaderStep extends AbstractStepImpl {
             }
             else {
                 result = artifactFilePath.act(new ArtifactFileCallable(listener,
-                        step.getUsername(envVars),
-                        step.getPassword(envVars),
+                        step.getUsername(envVars, project),
+                        step.getPassword(envVars, project),
                         envVars.expand(step.getNexusUrl()),
                         envVars.expand(step.getGroupId()),
                         envVars.expand(step.getArtifactId()),
