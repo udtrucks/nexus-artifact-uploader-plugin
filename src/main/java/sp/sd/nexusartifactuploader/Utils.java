@@ -38,7 +38,8 @@ public final class Utils {
     public static Boolean uploadArtifact(File artifactFile, TaskListener Listener, String ResolvedNexusUser,
                                  String ResolvedNexusPassword, String ResolvedNexusUrl,
                                  String ResolvedGroupId, String ResolvedArtifactId, String ResolvedVersion,
-                                 String ResolvedRepository, String ResolvedPackaging, String ResolvedProtocol) throws IOException {
+                                 String ResolvedRepository, String ResolvedPackaging, String ResolvedType, String ResolvedClassifier,
+                                 String ResolvedProtocol) throws IOException {
         Boolean result = false;
         if (Strings.isNullOrEmpty(ResolvedNexusUrl)) {
             Listener.getLogger().println("Url of the Nexus is empty. Please enter Nexus Url.");
@@ -59,22 +60,31 @@ public final class Utils {
             HttpPost httpPost = new HttpPost(ResolvedProtocol + "://" + ResolvedNexusUrl + "/service/local/artifact/maven/content");
             Listener.getLogger().println("GroupId: " + ResolvedGroupId);
             Listener.getLogger().println("ArtifactId: " + ResolvedArtifactId);
+            Listener.getLogger().println("Classifier: " + ResolvedClassifier);
+            Listener.getLogger().println("Type: " + ResolvedType);
             Listener.getLogger().println("Version: " + ResolvedVersion);
             Listener.getLogger().println("File: " + artifactFile.getName());
             Listener.getLogger().println("Repository:" + ResolvedRepository);
 
             Listener.getLogger().println("Uploading artifact " + artifactFile.getName() + " started....");
             FileBody artifactFileBody = new FileBody(artifactFile);
-            HttpEntity requestEntity = MultipartEntityBuilder.create()
+            MultipartEntityBuilder builder = MultipartEntityBuilder.create()
                     .addPart("r", new StringBody(ResolvedRepository, ContentType.TEXT_PLAIN))
                     .addPart("hasPom", new StringBody("false", ContentType.TEXT_PLAIN))
-                    .addPart("e", new StringBody(ResolvedPackaging, ContentType.TEXT_PLAIN))
                     .addPart("g", new StringBody(ResolvedGroupId, ContentType.TEXT_PLAIN))
                     .addPart("a", new StringBody(ResolvedArtifactId, ContentType.TEXT_PLAIN))
                     .addPart("v", new StringBody(ResolvedVersion, ContentType.TEXT_PLAIN))
-                    .addPart("p", new StringBody(ResolvedPackaging, ContentType.TEXT_PLAIN))
-                    .addPart("file", artifactFileBody)
-                    .build();
+                    .addPart("p", new StringBody(ResolvedPackaging, ContentType.TEXT_PLAIN));
+            if (ResolvedType != null && ResolvedType.length() > 0) { 
+                builder.addPart("e", new StringBody(ResolvedType, ContentType.TEXT_PLAIN));
+            } else {
+                builder.addPart("e", new StringBody(ResolvedPackaging, ContentType.TEXT_PLAIN)); // for backward compatibility
+            } 
+            if (ResolvedClassifier != null && ResolvedClassifier.length() > 0) {
+                builder.addPart("c", new StringBody(ResolvedClassifier, ContentType.TEXT_PLAIN));
+            }
+            builder.addPart("file", artifactFileBody);
+            HttpEntity requestEntity = builder.build();
             httpPost.setEntity(requestEntity);
             try (CloseableHttpResponse response = httpClient.execute(host, httpPost, localContext)) {
                 int statusCode = response.getStatusLine().getStatusCode();
