@@ -37,7 +37,7 @@ import sp.sd.nexusartifactuploader.NexusArtifactUploader;
 @Extension(optional = true)
 public class NexusArtifactUploaderJobDslExtension extends ContextExtensionPoint {
 
-    @RequiresPlugin(id = "nexus-artifact-uploader", minimumVersion = "2.3")
+    @RequiresPlugin(id = "nexus-artifact-uploader", minimumVersion = "2.4")
     @DslExtensionMethod(context = StepContext.class)
     public Object nexusArtifactUploader(Runnable closure) {
         NexusArtifactUploaderJobDslContext context = new NexusArtifactUploaderJobDslContext();
