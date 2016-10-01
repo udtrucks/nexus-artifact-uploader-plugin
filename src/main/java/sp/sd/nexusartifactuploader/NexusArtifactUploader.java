@@ -1,8 +1,6 @@
 package sp.sd.nexusartifactuploader;
 
-import hudson.EnvVars;
-import hudson.Extension;
-import hudson.Launcher;
+import hudson.*;
 import hudson.model.*;
 import hudson.security.ACL;
 import hudson.tasks.BuildStepDescriptor;
@@ -10,8 +8,6 @@ import hudson.tasks.Builder;
 import hudson.util.FormValidation;
 import hudson.util.Secret;
 import hudson.util.ListBoxModel;
-import hudson.FilePath;
-import hudson.FilePath.FileCallable;
 import hudson.remoting.VirtualChannel;
 import jenkins.MasterToSlaveFileCallable;
 import jenkins.tasks.SimpleBuildStep;
@@ -26,7 +22,6 @@ import java.util.Collections;
 import javax.annotation.CheckForNull;
 import javax.annotation.Nullable;
 
-import jenkins.model.Jenkins;
 import org.jenkinsci.remoting.RoleChecker;
 import com.cloudbees.plugins.credentials.CredentialsMatchers;
 import com.cloudbees.plugins.credentials.CredentialsProvider;
@@ -41,6 +36,7 @@ import com.google.common.base.Strings;
 public class NexusArtifactUploader extends Builder implements SimpleBuildStep, Serializable {
     private static final long serialVersionUID = 1;
 
+    private final String nexusVersion;
     private final String protocol;
     private final String nexusUrl;
     private final String nexusUser;
@@ -48,7 +44,6 @@ public class NexusArtifactUploader extends Builder implements SimpleBuildStep, S
     private final String groupId;
     private final String artifactId;
     private final String version;
-    private final String packaging;
     private final String type;
     private final String classifier;
     private final String repository;
@@ -60,9 +55,10 @@ public class NexusArtifactUploader extends Builder implements SimpleBuildStep, S
 
     // Fields in config.jelly must match the parameter names in the "DataBoundConstructor"
     @DataBoundConstructor
-    public NexusArtifactUploader(String protocol, String nexusUrl, String nexusUser, Secret nexusPassword, String groupId,
-                                 String artifactId, String version, String packaging, String type, String classifier,
+    public NexusArtifactUploader(String nexusVersion, String protocol, String nexusUrl, String nexusUser, Secret nexusPassword, String groupId,
+                                 String artifactId, String version, String type, String classifier,
                                  String repository, String file, String credentialsId) {
+        this.nexusVersion = nexusVersion;
         this.protocol = protocol;
         this.nexusUrl = nexusUrl;
         this.nexusUser = nexusUser;
@@ -70,12 +66,15 @@ public class NexusArtifactUploader extends Builder implements SimpleBuildStep, S
         this.groupId = groupId;
         this.artifactId = artifactId;
         this.version = version;
-        this.packaging = packaging;
         this.type = type;
         this.classifier = classifier;
         this.repository = repository;
         this.file = file;
         this.credentialsId = credentialsId;
+    }
+
+    public String getNexusVersion() {
+        return nexusVersion;
     }
 
     public String getProtocol() {
@@ -104,10 +103,6 @@ public class NexusArtifactUploader extends Builder implements SimpleBuildStep, S
 
     public String getVersion() {
         return version;
-    }
-
-    public String getPackaging() {
-        return packaging;
     }
 
     public String getType() {
@@ -201,14 +196,14 @@ public class NexusArtifactUploader extends Builder implements SimpleBuildStep, S
                     envVars.expand(artifactId),
                     envVars.expand(version),
                     envVars.expand(repository),
-                    envVars.expand(packaging),
                     envVars.expand(type),
                     envVars.expand(classifier),
-                    protocol
+                    protocol,
+                    nexusVersion
             ));
         }
         if (!result) {
-            build.setResult(Result.FAILURE);
+            throw new AbortException("Uploading file " + artifactFilePath.getName() + " failed.");
         }
     }
 
@@ -222,15 +217,15 @@ public class NexusArtifactUploader extends Builder implements SimpleBuildStep, S
         private final String resolvedArtifactId;
         private final String resolvedVersion;
         private final String resolvedRepository;
-        private final String resolvedPackaging;
         private final String resolvedType;
         private final String resolvedClassifier;
         private final String resolvedProtocol;
+        private final String resolvedNexusVersion;
 
         public ArtifactFileCallable(TaskListener Listener, String ResolvedNexusUser, String ResolvedNexusPassword, String ResolvedNexusUrl,
                                     String ResolvedGroupId, String ResolvedArtifactId, String ResolvedVersion,
-                                    String ResolvedRepository, String ResolvedPackaging, String ResolvedType, String ResolvedClassifier,
-                                    String ResolvedProtocol) {
+                                    String ResolvedRepository, String ResolvedType, String ResolvedClassifier,
+                                    String ResolvedProtocol, String ResolvedNexusVersion) {
             this.listener = Listener;
             this.resolvedNexusUser = ResolvedNexusUser;
             this.resolvedNexusPassword = ResolvedNexusPassword;
@@ -239,52 +234,23 @@ public class NexusArtifactUploader extends Builder implements SimpleBuildStep, S
             this.resolvedArtifactId = ResolvedArtifactId;
             this.resolvedVersion = ResolvedVersion;
             this.resolvedRepository = ResolvedRepository;
-            this.resolvedPackaging = ResolvedPackaging;
             this.resolvedType = ResolvedType;
             this.resolvedClassifier = ResolvedClassifier;
             this.resolvedProtocol = ResolvedProtocol;
+            this.resolvedNexusVersion = ResolvedNexusVersion;
         }
 
         @Override
         public Boolean invoke(File artifactFile, VirtualChannel channel) throws IOException {
             return Utils.uploadArtifact(artifactFile, listener, resolvedNexusUser, resolvedNexusPassword, resolvedNexusUrl,
-                    resolvedGroupId, resolvedArtifactId, resolvedVersion, resolvedRepository, resolvedPackaging, resolvedType, resolvedClassifier,
-                    resolvedProtocol);
+                    resolvedGroupId, resolvedArtifactId, resolvedVersion, resolvedRepository, resolvedType, resolvedClassifier,
+                    resolvedProtocol, resolvedNexusVersion);
         }
 
         @Override
         public void checkRoles(RoleChecker checker) throws SecurityException {
 
         }
-    }
-
-
-    public static final class LinkAction implements Action, ProminentProjectAction {
-        private final String name;
-        private final String url;
-        private final String icon;
-
-        public LinkAction(String ResolvedNexusUrl,
-                          String ResolvedGroupId, String ResolvedArtifactId, String ResolvedVersion, String ResolvedRepository, String ResolvedPackaging, 
-                          String ResolvedType, String ResolvedClassifier, String ResolvedProtocol, String Name) {
-            this.name = Name;
-            this.url = ResolvedProtocol + "://" + ResolvedNexusUrl + "/service/local/repositories/" + ResolvedRepository + "/content/" + ResolvedGroupId.replace('.', '/') + "/" + ResolvedArtifactId + "/" + ResolvedVersion + "/" + ResolvedArtifactId + "-" + ResolvedVersion + "." + ResolvedType;
-            this.icon = "package.gif";
-        }
-
-        public String getIconFileName() {
-            return icon;
-        }
-
-
-        public String getDisplayName() {
-            return name;
-        }
-
-        public String getUrlName() {
-            return url;
-        }
-
     }
 
     @Override
@@ -337,17 +303,13 @@ public class NexusArtifactUploader extends Builder implements SimpleBuildStep, S
         }
 
         public FormValidation doCheckType(@QueryParameter String value) {
+            if (value.length() == 0) {
+                return FormValidation.error("Type must not be empty");
+            }
             return FormValidation.ok();
         }
 
         public FormValidation doCheckClassifier(@QueryParameter String value) {
-            return FormValidation.ok();
-        }
-
-        public FormValidation doCheckPackaging(@QueryParameter String value) {
-            if (value.length() == 0) {
-                return FormValidation.error("Packaging must not be empty");
-            }
             return FormValidation.ok();
         }
 
