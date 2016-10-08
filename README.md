@@ -26,16 +26,16 @@ file - each file to be uploaded, use one file parameter per file.
     freeStyleJob('NexusArtifactUploaderJob') {
         steps {
           nexusArtifactUploader {
+            nexusVersion('nexus2')
             protocol('http')
             nexusUrl('localhost:8080/nexus')
             groupId('sp.sd')
             artifactId('nexus-artifact-uploader')
             version('2.4')
-            packaging('hpi')
             type('jar')
             classifier('debug')
             repository('NexusArtifactUploader')
-            file('nexus-artifact-uploader.hpi')
+            file('nexus-artifact-uploader.jar')
             credentialsId('44620c50-1589-4617-a677-7563985e46e1')
           }
         }
