@@ -6,17 +6,21 @@ import javaposse.jobdsl.dsl.Context;
  * Created by suresh on 9/29/2016.
  */
 public class NexusArtifactUploaderJobDslContext implements Context {
+    String nexusVersion;
     String protocol;
     String nexusUrl;
     String groupId;
     String artifactId;
     String version;
-    String packaging;
     String type;
     String classifier;
     String repository;
     String file;
     String credentialsId;
+
+    void nexusVersion(String nexusVersion) {
+        this.nexusVersion = nexusVersion;
+    }
 
     void protocol(String protocol) {
         this.protocol = protocol;
@@ -36,10 +40,6 @@ public class NexusArtifactUploaderJobDslContext implements Context {
 
     void version(String version) {
         this.version = version;
-    }
-
-    void packaging(String packaging) {
-        this.packaging = packaging;
     }
 
     void type(String type) {

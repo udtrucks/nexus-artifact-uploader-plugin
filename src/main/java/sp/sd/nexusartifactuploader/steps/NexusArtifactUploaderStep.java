@@ -17,7 +17,6 @@ import javax.annotation.CheckForNull;
 import javax.annotation.Nullable;
 import javax.inject.Inject;
 
-import hudson.model.AbstractProject;
 import hudson.model.Item;
 import hudson.model.Run;
 import hudson.model.TaskListener;
@@ -27,7 +26,6 @@ import hudson.util.FormValidation;
 import hudson.util.ListBoxModel;
 import hudson.util.Secret;
 import jenkins.MasterToSlaveFileCallable;
-import jenkins.model.Jenkins;
 import org.jenkinsci.plugins.workflow.steps.AbstractStepDescriptorImpl;
 import org.jenkinsci.plugins.workflow.steps.AbstractStepImpl;
 import org.jenkinsci.plugins.workflow.steps.AbstractSynchronousNonBlockingStepExecution;
@@ -35,7 +33,6 @@ import org.jenkinsci.plugins.workflow.steps.StepContextParameter;
 import org.jenkinsci.remoting.RoleChecker;
 import org.kohsuke.stapler.AncestorInPath;
 import org.kohsuke.stapler.DataBoundConstructor;
-import org.kohsuke.stapler.DataBoundSetter;
 import org.kohsuke.stapler.QueryParameter;
 import sp.sd.nexusartifactuploader.Utils;
 
@@ -44,6 +41,8 @@ import java.io.IOException;
 import java.util.Collections;
 
 public final class NexusArtifactUploaderStep extends AbstractStepImpl {
+
+    private final String nexusVersion;
     private final String protocol;
     private final String nexusUrl;
     private final String nexusUser;
@@ -51,7 +50,6 @@ public final class NexusArtifactUploaderStep extends AbstractStepImpl {
     private final String groupId;
     private final String artifactId;
     private final String version;
-    private final String packaging;
     private final String type;
     private final String classifier;
     private final String repository;
@@ -61,9 +59,10 @@ public final class NexusArtifactUploaderStep extends AbstractStepImpl {
     String credentialsId;
 
     @DataBoundConstructor
-    public NexusArtifactUploaderStep(String protocol, String nexusUrl, String nexusUser, String nexusPassword, String groupId,
-                                     String artifactId, String version, String packaging, String type, String classifier,
+    public NexusArtifactUploaderStep(String nexusVersion, String protocol, String nexusUrl, String nexusUser, String nexusPassword, String groupId,
+                                     String artifactId, String version, String type, String classifier,
                                      String repository, String file, String credentialsId) {
+        this.nexusVersion = nexusVersion;
         this.protocol = protocol;
         this.nexusUrl = nexusUrl;
         this.nexusUser = nexusUser;
@@ -71,12 +70,15 @@ public final class NexusArtifactUploaderStep extends AbstractStepImpl {
         this.groupId = groupId;
         this.artifactId = artifactId;
         this.version = version;
-        this.packaging = packaging;
         this.type = type;
         this.classifier = classifier;
         this.repository = repository;
         this.file = file;
         this.credentialsId = credentialsId;
+    }
+
+    public String getNexusVersion() {
+        return nexusVersion;
     }
 
     public String getProtocol() {
@@ -105,10 +107,6 @@ public final class NexusArtifactUploaderStep extends AbstractStepImpl {
 
     public String getVersion() {
         return version;
-    }
-
-    public String getPackaging() {
-        return packaging;
     }
 
     public String getType() {
@@ -232,14 +230,10 @@ public final class NexusArtifactUploaderStep extends AbstractStepImpl {
             return FormValidation.ok();
         }
 
-        public FormValidation doCheckPackaging(@QueryParameter String value) {
-            if (value.length() == 0) {
-                return FormValidation.error("Packaging must not be empty");
-            }
-            return FormValidation.ok();
-        }
-
         public FormValidation doCheckType(@QueryParameter String value) {
+            if (value.length() == 0) {
+                return FormValidation.error("Type must not be empty");
+            }
             return FormValidation.ok();
         }
 
@@ -304,10 +298,10 @@ public final class NexusArtifactUploaderStep extends AbstractStepImpl {
                         envVars.expand(step.getArtifactId()),
                         envVars.expand(step.getVersion()),
                         envVars.expand(step.getRepository()),
-                        envVars.expand(step.getPackaging()),
                         envVars.expand(step.getType()),
                         envVars.expand(step.getClassifier()),
-                        step.getProtocol()
+                        step.getProtocol(),
+                        step.getNexusVersion()
                 ));
             }
             return result;
@@ -325,15 +319,16 @@ public final class NexusArtifactUploaderStep extends AbstractStepImpl {
         private final String resolvedArtifactId;
         private final String resolvedVersion;
         private final String resolvedRepository;
-        private final String resolvedPackaging;
         private final String resolvedType;
         private final String resolvedClassifier;
         private final String resolvedProtocol;
+        private final String resolvedNexusVersion;
 
         public ArtifactFileCallable(TaskListener Listener, String ResolvedNexusUser, String ResolvedNexusPassword,
                                     String ResolvedNexusUrl, String ResolvedGroupId, String ResolvedArtifactId,
-                                    String ResolvedVersion, String ResolvedRepository, String ResolvedPackaging,
-                                    String ResolvedType, String ResolvedClassifier, String ResolvedProtocol) {
+                                    String ResolvedVersion, String ResolvedRepository,
+                                    String ResolvedType, String ResolvedClassifier,
+                                    String ResolvedProtocol, String ResolvedNexusVersion) {
             this.listener = Listener;
             this.resolvedNexusUser = ResolvedNexusUser;
             this.resolvedNexusPassword = ResolvedNexusPassword;
@@ -342,17 +337,17 @@ public final class NexusArtifactUploaderStep extends AbstractStepImpl {
             this.resolvedArtifactId = ResolvedArtifactId;
             this.resolvedVersion = ResolvedVersion;
             this.resolvedRepository = ResolvedRepository;
-            this.resolvedPackaging = ResolvedPackaging;
             this.resolvedType = ResolvedType;
             this.resolvedClassifier = ResolvedClassifier;
             this.resolvedProtocol = ResolvedProtocol;
+            this.resolvedNexusVersion = ResolvedNexusVersion;
         }
 
         @Override
         public Boolean invoke(File artifactFile, VirtualChannel channel) throws IOException {
             return Utils.uploadArtifact(artifactFile, listener, resolvedNexusUser, resolvedNexusPassword, resolvedNexusUrl,
-                    resolvedGroupId, resolvedArtifactId, resolvedVersion, resolvedRepository, resolvedPackaging, 
-                    resolvedType, resolvedClassifier, resolvedProtocol);
+                    resolvedGroupId, resolvedArtifactId, resolvedVersion, resolvedRepository,
+                    resolvedType, resolvedClassifier, resolvedProtocol, resolvedNexusVersion);
         }
 
         @Override
