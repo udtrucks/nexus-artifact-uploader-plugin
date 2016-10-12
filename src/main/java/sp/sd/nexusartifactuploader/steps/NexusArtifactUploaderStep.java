@@ -304,6 +304,9 @@ public final class NexusArtifactUploaderStep extends AbstractStepImpl {
                         step.getNexusVersion()
                 ));
             }
+            if(!result) {
+                throw new AbortException("Uploading file " + artifactFilePath.getName() + " failed.");
+            }
             return result;
         }
         private static final long serialVersionUID = 1L;
