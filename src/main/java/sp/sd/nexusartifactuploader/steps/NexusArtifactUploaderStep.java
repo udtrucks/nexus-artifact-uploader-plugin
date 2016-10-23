@@ -34,47 +34,39 @@ import org.jenkinsci.remoting.RoleChecker;
 import org.kohsuke.stapler.AncestorInPath;
 import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.QueryParameter;
+import sp.sd.nexusartifactuploader.Artifact;
 import sp.sd.nexusartifactuploader.Utils;
 
 import java.io.File;
 import java.io.IOException;
 import java.util.Collections;
+import java.util.List;
 
 public final class NexusArtifactUploaderStep extends AbstractStepImpl {
 
     private final String nexusVersion;
     private final String protocol;
     private final String nexusUrl;
-    private final String nexusUser;
-    private final String nexusPassword;
     private final String groupId;
-    private final String artifactId;
     private final String version;
-    private final String type;
-    private final String classifier;
     private final String repository;
-    private final String file;
+    private final List<Artifact> artifacts;
+
     private final
     @CheckForNull
     String credentialsId;
 
     @DataBoundConstructor
-    public NexusArtifactUploaderStep(String nexusVersion, String protocol, String nexusUrl, String nexusUser, String nexusPassword, String groupId,
-                                     String artifactId, String version, String type, String classifier,
-                                     String repository, String file, String credentialsId) {
+    public NexusArtifactUploaderStep(String nexusVersion, String protocol, String nexusUrl, String groupId,
+                                     String version, String repository, String credentialsId, List<Artifact> artifacts) {
         this.nexusVersion = nexusVersion;
         this.protocol = protocol;
         this.nexusUrl = nexusUrl;
-        this.nexusUser = nexusUser;
-        this.nexusPassword = Secret.fromString(nexusPassword).getEncryptedValue();
         this.groupId = groupId;
-        this.artifactId = artifactId;
         this.version = version;
-        this.type = type;
-        this.classifier = classifier;
         this.repository = repository;
-        this.file = file;
         this.credentialsId = credentialsId;
+        this.artifacts = artifacts;
     }
 
     public String getNexusVersion() {
@@ -89,40 +81,20 @@ public final class NexusArtifactUploaderStep extends AbstractStepImpl {
         return nexusUrl;
     }
 
-    public String getNexusUser() {
-        return nexusUser;
-    }
-
-    public String getNexusPassword() {
-        return Secret.decrypt(nexusPassword).getPlainText();
-    }
-
     public String getGroupId() {
         return groupId;
-    }
-
-    public String getArtifactId() {
-        return artifactId;
     }
 
     public String getVersion() {
         return version;
     }
 
-    public String getType() {
-        return type;
-    }
-
-    public String getClassifier() {
-        return classifier;
-    }
-
     public String getRepository() {
         return repository;
     }
 
-    public String getFile() {
-        return file;
+    public List<Artifact> getArtifacts() {
+        return artifacts;
     }
 
     public
@@ -155,12 +127,7 @@ public final class NexusArtifactUploaderStep extends AbstractStepImpl {
     }
 
     public String getUsername(EnvVars environment, Item project) {
-        String Username = null;
-        if (Strings.isNullOrEmpty(nexusUser)) {
-            Username = "";
-        } else {
-            Username = environment.expand(nexusUser);
-        }
+        String Username = "";
         if (!Strings.isNullOrEmpty(credentialsId)) {
             Username = this.getCredentials(project).getUsername();
         }
@@ -168,12 +135,7 @@ public final class NexusArtifactUploaderStep extends AbstractStepImpl {
     }
 
     public String getPassword(EnvVars environment, Item project) {
-        String Password = null;
-        if (nexusPassword == null) {
-            Password = "";
-        } else {
-            Password = environment.expand(Secret.decrypt(nexusPassword).getPlainText());
-        }
+        String Password = "";
         if (!Strings.isNullOrEmpty(credentialsId)) {
             Password = Secret.toString(StandardUsernamePasswordCredentials.class.cast(this.getCredentials(project)).getPassword());
         }
@@ -194,7 +156,7 @@ public final class NexusArtifactUploaderStep extends AbstractStepImpl {
 
         @Override
         public String getDisplayName() {
-            return "Nexus non-maven artifacts uploader";
+            return "Nexus Artifact Uploader";
         }
 
         public FormValidation doCheckNexusUrl(@QueryParameter String value) {
@@ -216,13 +178,6 @@ public final class NexusArtifactUploaderStep extends AbstractStepImpl {
             return FormValidation.ok();
         }
 
-        public FormValidation doCheckArtifactId(@QueryParameter String value) {
-            if (value.length() == 0) {
-                return FormValidation.error("ArtifactId must not be empty");
-            }
-            return FormValidation.ok();
-        }
-
         public FormValidation doCheckVersion(@QueryParameter String value) {
             if (value.length() == 0) {
                 return FormValidation.error("Version must not be empty");
@@ -230,27 +185,9 @@ public final class NexusArtifactUploaderStep extends AbstractStepImpl {
             return FormValidation.ok();
         }
 
-        public FormValidation doCheckType(@QueryParameter String value) {
-            if (value.length() == 0) {
-                return FormValidation.error("Type must not be empty");
-            }
-            return FormValidation.ok();
-        }
-
-        public FormValidation doCheckClassifier(@QueryParameter String value) {
-            return FormValidation.ok();
-        }
-
         public FormValidation doCheckRepository(@QueryParameter String value) {
             if (value.length() == 0) {
                 return FormValidation.error("Repository must not be empty");
-            }
-            return FormValidation.ok();
-        }
-
-        public FormValidation doCheckFile(@QueryParameter String value) {
-            if (value.length() == 0) {
-                return FormValidation.error("File must not be empty");
             }
             return FormValidation.ok();
         }
@@ -284,31 +221,33 @@ public final class NexusArtifactUploaderStep extends AbstractStepImpl {
             Boolean result = false;
             Item project = build.getParent();
             EnvVars envVars = build.getEnvironment(listener);
-            FilePath artifactFilePath = new FilePath(ws, build.getEnvironment(listener).expand(step.getFile()));
-            if (!artifactFilePath.exists()) {
-                listener.getLogger().println(artifactFilePath.getName() + " file doesn't exists");
-                throw new IOException(artifactFilePath.getName() + " file doesn't exists");
-            }
-            else {
-                result = artifactFilePath.act(new ArtifactFileCallable(listener,
-                        step.getUsername(envVars, project),
-                        step.getPassword(envVars, project),
-                        envVars.expand(step.getNexusUrl()),
-                        envVars.expand(step.getGroupId()),
-                        envVars.expand(step.getArtifactId()),
-                        envVars.expand(step.getVersion()),
-                        envVars.expand(step.getRepository()),
-                        envVars.expand(step.getType()),
-                        envVars.expand(step.getClassifier()),
-                        step.getProtocol(),
-                        step.getNexusVersion()
-                ));
-            }
-            if(!result) {
-                throw new AbortException("Uploading file " + artifactFilePath.getName() + " failed.");
+            for (Artifact artifact : step.artifacts) {
+                FilePath artifactFilePath = new FilePath(ws, build.getEnvironment(listener).expand(artifact.getFile()));
+                if (!artifactFilePath.exists()) {
+                    listener.getLogger().println(artifactFilePath.getName() + " file doesn't exists");
+                    throw new IOException(artifactFilePath.getName() + " file doesn't exists");
+                } else {
+                    result = artifactFilePath.act(new ArtifactFileCallable(listener,
+                            step.getUsername(envVars, project),
+                            step.getPassword(envVars, project),
+                            envVars.expand(step.getNexusUrl()),
+                            envVars.expand(step.getGroupId()),
+                            envVars.expand(artifact.getArtifactId()),
+                            envVars.expand(step.getVersion()),
+                            envVars.expand(step.getRepository()),
+                            envVars.expand(artifact.getType()),
+                            envVars.expand(artifact.getClassifier()),
+                            step.getProtocol(),
+                            step.getNexusVersion()
+                    ));
+                }
+                if (!result) {
+                    throw new AbortException("Uploading file " + artifactFilePath.getName() + " failed.");
+                }
             }
             return result;
         }
+
         private static final long serialVersionUID = 1L;
     }
 

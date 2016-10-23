@@ -1,6 +1,15 @@
 package sp.sd.nexusartifactuploader.dsl;
 
+import groovy.lang.Closure;
 import javaposse.jobdsl.dsl.Context;
+import javaposse.jobdsl.dsl.DslContext;
+import javaposse.jobdsl.plugin.DslExtensionMethod;
+import sp.sd.nexusartifactuploader.Artifact;
+
+import java.util.ArrayList;
+import java.util.List;
+
+import static javaposse.jobdsl.plugin.ContextExtensionPoint.executeInContext;
 
 /**
  * Created by suresh on 9/29/2016.
@@ -10,13 +19,10 @@ public class NexusArtifactUploaderJobDslContext implements Context {
     String protocol;
     String nexusUrl;
     String groupId;
-    String artifactId;
     String version;
-    String type;
-    String classifier;
     String repository;
-    String file;
     String credentialsId;
+    List<Artifact> artifactList = new ArrayList<>();
 
     void nexusVersion(String nexusVersion) {
         this.nexusVersion = nexusVersion;
@@ -34,31 +40,22 @@ public class NexusArtifactUploaderJobDslContext implements Context {
         this.groupId = groupId;
     }
 
-    void artifactId(String artifactId) {
-        this.artifactId = artifactId;
-    }
-
     void version(String version) {
         this.version = version;
-    }
-
-    void type(String type) {
-        this.type = type;
-    }
-
-    void classifier(String classifier) {
-        this.classifier = classifier;
     }
 
     void repository(String repository) {
         this.repository = repository;
     }
 
-    void file(String file) {
-        this.file = file;
-    }
-
     void credentialsId(String credentialsId) {
         this.credentialsId = credentialsId;
+    }
+
+    void artifact(@DslContext(ArtifactJobDslContext.class) Closure artifactClosure) {
+        ArtifactJobDslContext context = new ArtifactJobDslContext();
+        executeInContext(artifactClosure, context);
+        Artifact artifact = new Artifact(context.artifactId, context.type, context.classifier, context.file);
+        artifactList.add(artifact);
     }
 }
