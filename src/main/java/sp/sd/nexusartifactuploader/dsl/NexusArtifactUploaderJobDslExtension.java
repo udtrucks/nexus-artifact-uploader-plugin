@@ -22,13 +22,21 @@ import sp.sd.nexusartifactuploader.NexusArtifactUploader;
             protocol('http')
             nexusUrl('localhost:8080/nexus')
             groupId('sp.sd')
-            artifactId('nexus-artifact-uploader')
             version('2.4')
-            type('jar')
-            classifier('debug')
             repository('NexusArtifactUploader')
-            file('nexus-artifact-uploader.jar')
             credentialsId('44620c50-1589-4617-a677-7563985e46e1')
+            artifact {
+                artifactId('nexus-artifact-uploader')
+                type('jar')
+                classifier('debug')
+                file('nexus-artifact-uploader.jar')
+            }
+            artifact {
+                artifactId('nexus-artifact-uploader')
+                type('hpi')
+                classifier('debug')
+                file('nexus-artifact-uploader.hpi')
+            }
           }
         }
     }
@@ -43,6 +51,6 @@ public class NexusArtifactUploaderJobDslExtension extends ContextExtensionPoint 
         NexusArtifactUploaderJobDslContext context = new NexusArtifactUploaderJobDslContext();
         executeInContext(closure, context);
 
-        return new NexusArtifactUploader(context.nexusVersion, context.protocol, context.nexusUrl, null, null, context.groupId, context.artifactId, context.version, context.type, context.classifier, context.repository, context.file, context.credentialsId);
+        return new NexusArtifactUploader(context.nexusVersion, context.protocol, context.nexusUrl, context.groupId, context.version, context.repository, context.credentialsId, context.artifactList);
     }
 }

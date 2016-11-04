@@ -19,6 +19,7 @@ import java.io.File;
 import java.io.IOException;
 import java.io.Serializable;
 import java.util.Collections;
+import java.util.List;
 import javax.annotation.CheckForNull;
 import javax.annotation.Nullable;
 
@@ -39,15 +40,10 @@ public class NexusArtifactUploader extends Builder implements SimpleBuildStep, S
     private final String nexusVersion;
     private final String protocol;
     private final String nexusUrl;
-    private final String nexusUser;
-    private final Secret nexusPassword;
     private final String groupId;
-    private final String artifactId;
     private final String version;
-    private final String type;
-    private final String classifier;
     private final String repository;
-    private final String file;
+    private final List<Artifact> artifacts;
 
     private final
     @CheckForNull
@@ -55,22 +51,16 @@ public class NexusArtifactUploader extends Builder implements SimpleBuildStep, S
 
     // Fields in config.jelly must match the parameter names in the "DataBoundConstructor"
     @DataBoundConstructor
-    public NexusArtifactUploader(String nexusVersion, String protocol, String nexusUrl, String nexusUser, Secret nexusPassword, String groupId,
-                                 String artifactId, String version, String type, String classifier,
-                                 String repository, String file, String credentialsId) {
+    public NexusArtifactUploader(String nexusVersion, String protocol, String nexusUrl, String groupId,
+                                 String version, String repository, String credentialsId, List<Artifact> artifacts) {
         this.nexusVersion = nexusVersion;
         this.protocol = protocol;
         this.nexusUrl = nexusUrl;
-        this.nexusUser = nexusUser;
-        this.nexusPassword = nexusPassword;
         this.groupId = groupId;
-        this.artifactId = artifactId;
         this.version = version;
-        this.type = type;
-        this.classifier = classifier;
         this.repository = repository;
-        this.file = file;
         this.credentialsId = credentialsId;
+        this.artifacts = artifacts;
     }
 
     public String getNexusVersion() {
@@ -85,40 +75,20 @@ public class NexusArtifactUploader extends Builder implements SimpleBuildStep, S
         return nexusUrl;
     }
 
-    public String getNexusUser() {
-        return nexusUser;
-    }
-
-    public Secret getNexusPassword() {
-        return nexusPassword;
-    }
-
     public String getGroupId() {
         return groupId;
-    }
-
-    public String getArtifactId() {
-        return artifactId;
     }
 
     public String getVersion() {
         return version;
     }
 
-    public String getType() {
-        return type;
-    }
-
-    public String getClassifier() {
-        return classifier;
-    }
-
     public String getRepository() {
         return repository;
     }
 
-    public String getFile() {
-        return file;
+    public List<Artifact> getArtifacts() {
+        return artifacts;
     }
 
     public
@@ -151,12 +121,7 @@ public class NexusArtifactUploader extends Builder implements SimpleBuildStep, S
     }
 
     public String getUsername(EnvVars environment, Item project) {
-        String Username = null;
-        if (Strings.isNullOrEmpty(nexusUser)) {
-            Username = "";
-        } else {
-            Username = environment.expand(nexusUser);
-        }
+        String Username = "";
         if (!Strings.isNullOrEmpty(credentialsId)) {
             Username = this.getCredentials(project).getUsername();
         }
@@ -164,46 +129,41 @@ public class NexusArtifactUploader extends Builder implements SimpleBuildStep, S
     }
 
     public String getPassword(EnvVars environment, Item project) {
-        String Password = null;
-        if (nexusPassword == null) {
-            Password = "";
-        } else {
-            Password = environment.expand(Secret.toString(nexusPassword));
-        }
+        String Password = "";
         if (!Strings.isNullOrEmpty(credentialsId)) {
             Password = Secret.toString(StandardUsernamePasswordCredentials.class.cast(this.getCredentials(project)).getPassword());
         }
         return Password;
     }
 
-
     @Override
     public void perform(Run build, FilePath workspace, Launcher launcher, TaskListener listener) throws IOException, InterruptedException {
         boolean result = false;
         EnvVars envVars = build.getEnvironment(listener);
-        FilePath artifactFilePath = new FilePath(workspace, build.getEnvironment(listener).expand(file));
         Item project = build.getParent();
-        if (!artifactFilePath.exists()) {
-            listener.getLogger().println(artifactFilePath.getName() + " file doesn't exists");
-            throw new IOException(artifactFilePath.getName() + " file doesn't exists");
-        }
-        else {
-            result = artifactFilePath.act(new ArtifactFileCallable(listener,
-                    this.getUsername(envVars, project),
-                    this.getPassword(envVars, project),
-                    envVars.expand(nexusUrl),
-                    envVars.expand(groupId),
-                    envVars.expand(artifactId),
-                    envVars.expand(version),
-                    envVars.expand(repository),
-                    envVars.expand(type),
-                    envVars.expand(classifier),
-                    protocol,
-                    nexusVersion
-            ));
-        }
-        if (!result) {
-            throw new AbortException("Uploading file " + artifactFilePath.getName() + " failed.");
+        for (Artifact artifact : artifacts) {
+            FilePath artifactFilePath = new FilePath(workspace, build.getEnvironment(listener).expand(artifact.getFile()));
+            if (!artifactFilePath.exists()) {
+                listener.getLogger().println(artifactFilePath.getName() + " file doesn't exists");
+                throw new IOException(artifactFilePath.getName() + " file doesn't exists");
+            } else {
+                result = artifactFilePath.act(new ArtifactFileCallable(listener,
+                        this.getUsername(envVars, project),
+                        this.getPassword(envVars, project),
+                        envVars.expand(nexusUrl),
+                        envVars.expand(groupId),
+                        envVars.expand(artifact.getArtifactId()),
+                        envVars.expand(version),
+                        envVars.expand(repository),
+                        envVars.expand(artifact.getType()),
+                        envVars.expand(artifact.getClassifier()),
+                        protocol,
+                        nexusVersion
+                ));
+            }
+            if (!result) {
+                throw new AbortException("Uploading file " + artifactFilePath.getName() + " failed.");
+            }
         }
     }
 
@@ -266,7 +226,7 @@ public class NexusArtifactUploader extends Builder implements SimpleBuildStep, S
         }
 
         public String getDisplayName() {
-            return "Upload artifact to nexus";
+            return "Nexus artifact uploader";
         }
 
         public FormValidation doCheckNexusUrl(@QueryParameter String value) {
@@ -288,13 +248,6 @@ public class NexusArtifactUploader extends Builder implements SimpleBuildStep, S
             return FormValidation.ok();
         }
 
-        public FormValidation doCheckArtifactId(@QueryParameter String value) {
-            if (value.length() == 0) {
-                return FormValidation.error("ArtifactId must not be empty");
-            }
-            return FormValidation.ok();
-        }
-
         public FormValidation doCheckVersion(@QueryParameter String value) {
             if (value.length() == 0) {
                 return FormValidation.error("Version must not be empty");
@@ -302,27 +255,9 @@ public class NexusArtifactUploader extends Builder implements SimpleBuildStep, S
             return FormValidation.ok();
         }
 
-        public FormValidation doCheckType(@QueryParameter String value) {
-            if (value.length() == 0) {
-                return FormValidation.error("Type must not be empty");
-            }
-            return FormValidation.ok();
-        }
-
-        public FormValidation doCheckClassifier(@QueryParameter String value) {
-            return FormValidation.ok();
-        }
-
         public FormValidation doCheckRepository(@QueryParameter String value) {
             if (value.length() == 0) {
                 return FormValidation.error("Repository must not be empty");
-            }
-            return FormValidation.ok();
-        }
-
-        public FormValidation doCheckFile(@QueryParameter String value) {
-            if (value.length() == 0) {
-                return FormValidation.error("File must not be empty");
             }
             return FormValidation.ok();
         }

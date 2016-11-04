@@ -2,6 +2,7 @@ package sp.sd.nexusartifactuploader;
 
 import com.google.common.base.Strings;
 import hudson.model.TaskListener;
+
 import java.io.File;
 import java.io.IOException;
 
@@ -34,7 +35,7 @@ public final class Utils {
             Listener.getLogger().println("File: " + artifactFile.getName());
             Listener.getLogger().println("Repository:" + ResolvedRepository);
             String repositoryPath = "/content/repositories/";
-            if(ResolvedNexusVersion.contentEquals("nexus3")) {
+            if (ResolvedNexusVersion.contentEquals("nexus3")) {
                 repositoryPath = "/repository/";
             }
             ArtifactRepositoryManager artifactRepositoryManager = new ArtifactRepositoryManager(ResolvedProtocol + "://"
