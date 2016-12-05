@@ -40,7 +40,7 @@ public final class Utils {
             }
             ArtifactRepositoryManager artifactRepositoryManager = new ArtifactRepositoryManager(ResolvedProtocol + "://"
                     + ResolvedNexusUrl + repositoryPath + ResolvedRepository, ResolvedNexusUser,
-                    ResolvedNexusPassword, ResolvedRepository);
+                    ResolvedNexusPassword, ResolvedRepository, Listener);
             artifactRepositoryManager.upload(ResolvedGroupId, ResolvedArtifactId, ResolvedVersion,
                     artifactFile, ResolvedType, ResolvedClassifier);
             Listener.getLogger().println("Uploading artifact " + artifactFile.getName() + " completed.");
