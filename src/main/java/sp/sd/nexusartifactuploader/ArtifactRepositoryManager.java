@@ -9,13 +9,9 @@ import org.apache.maven.settings.building.SettingsBuildingException;
 import org.apache.maven.settings.building.SettingsBuildingRequest;
 import org.sonatype.aether.*;
 import org.sonatype.aether.artifact.Artifact;
-import org.sonatype.aether.artifact.ArtifactTypeRegistry;
-import org.sonatype.aether.collection.DependencyGraphTransformer;
-import org.sonatype.aether.collection.DependencyManager;
-import org.sonatype.aether.collection.DependencySelector;
-import org.sonatype.aether.collection.DependencyTraverser;
-import org.sonatype.aether.connector.async.AsyncRepositoryConnectorFactory;
 import org.sonatype.aether.connector.file.FileRepositoryConnectorFactory;
+import org.sonatype.aether.connector.wagon.WagonProvider;
+import org.sonatype.aether.connector.wagon.WagonRepositoryConnectorFactory;
 import org.sonatype.aether.deployment.DeployRequest;
 import org.sonatype.aether.impl.ArtifactDescriptorReader;
 import org.sonatype.aether.impl.MetadataGeneratorFactory;
@@ -24,11 +20,9 @@ import org.sonatype.aether.impl.VersionResolver;
 import org.sonatype.aether.impl.internal.DefaultServiceLocator;
 import org.sonatype.aether.repository.*;
 import org.sonatype.aether.spi.connector.RepositoryConnectorFactory;
-import org.sonatype.aether.transfer.TransferListener;
 import org.sonatype.aether.util.artifact.DefaultArtifact;
 
 import java.io.File;
-import java.util.Map;
 
 public class ArtifactRepositoryManager {
 
@@ -77,12 +71,13 @@ public class ArtifactRepositoryManager {
                 .getEffectiveSettings();
 
         repositorySystem = new DefaultServiceLocator()
-                .addService(RepositoryConnectorFactory.class, AsyncRepositoryConnectorFactory.class)
                 .addService(RepositoryConnectorFactory.class, FileRepositoryConnectorFactory.class)
+                .addService(RepositoryConnectorFactory.class, WagonRepositoryConnectorFactory.class)
                 .addService(VersionResolver.class, DefaultVersionResolver.class)
                 .addService(VersionRangeResolver.class, DefaultVersionRangeResolver.class)
                 .addService(ArtifactDescriptorReader.class, DefaultArtifactDescriptorReader.class)
                 .addService(MetadataGeneratorFactory.class, SnapshotMetadataGeneratorFactory.class)
+                .setServices(WagonProvider.class, new ManualWagonProvider())
                 .getService(RepositorySystem.class);
 
         String localRepository = settings.getLocalRepository();
