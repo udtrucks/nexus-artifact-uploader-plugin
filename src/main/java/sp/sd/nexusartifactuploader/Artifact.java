@@ -26,7 +26,7 @@ public class Artifact extends AbstractDescribableImpl<Artifact> implements Seria
         this.artifactId = artifactId;
         this.type = type;
         this.classifier = classifier;
-        this.file = file;
+        this.file = file != null ? file.trim() : null;
     }
 
     public String getArtifactId() {
