@@ -2,19 +2,11 @@
 <j:jelly xmlns:j="jelly:core" xmlns:st="jelly:stapler" xmlns:d="jelly:define" xmlns:l="/lib/layout"
          xmlns:t="/lib/hudson" xmlns:f="/lib/form" xmlns:c="/lib/credentials">
     <f:section title="Nexus Details">
-        <f:entry name="nexusVersion" title="Nexus Version" field="nexusVersion">
-            <select name="nexusVersion" class="setting-input  select">
-                <option value="nexus2" selected="${instance.getNexusVersion().equals('nexus2')? 'true':null}">NEXUS2
-                </option>
-                <option value="nexus3" selected="${instance.getNexusVersion().equals('nexus3')? 'true':null}">NEXUS3
-                </option>
-            </select>
+        <f:entry title="Nexus Version" field="nexusVersion">
+            <f:select />
         </f:entry>
-        <f:entry name="protocol" title="Protocol" field="protocol">
-            <select name="protocol" class="setting-input  select">
-                <option value="http" selected="${instance.getProtocol().equals('http')? 'true':null}">HTTP</option>
-                <option value="https" selected="${instance.getProtocol().equals('https')? 'true':null}">HTTPS</option>
-            </select>
+        <f:entry title="Protocol" field="protocol">
+            <f:select />
         </f:entry>
         <f:entry title="Nexus URL" field="nexusUrl">
             <f:textbox/>

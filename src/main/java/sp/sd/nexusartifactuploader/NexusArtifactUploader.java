@@ -268,6 +268,20 @@ public class NexusArtifactUploader extends Builder implements SimpleBuildStep, S
             }
             return new StandardUsernameListBoxModel().withEmptySelection().withAll(CredentialsProvider.lookupCredentials(StandardUsernamePasswordCredentials.class, owner, ACL.SYSTEM, Collections.<DomainRequirement>emptyList()));
         }
+
+        public ListBoxModel doFillNexusVersionItems() {
+            ListBoxModel items = new ListBoxModel();
+            items.add("NEXUS2", "nexus2");
+            items.add("NEXUS3", "nexus3");
+            return items;
+        }
+
+        public ListBoxModel doFillProtocolItems() {
+            ListBoxModel items = new ListBoxModel();
+            items.add("HTTP", "http");
+            items.add("HTTPS", "https");
+            return items;
+        }
     }
 
 }
