@@ -141,6 +141,9 @@ public class NexusArtifactUploader extends Builder implements SimpleBuildStep, S
         boolean result = false;
         EnvVars envVars = build.getEnvironment(listener);
         Item project = build.getParent();
+        if (artifacts == null || artifacts.size() == 0) {
+            throw new IOException("No artifacts defined. Artifacts must be defined in addition to group id. See https://plugins.jenkins.io/nexus-artifact-uploader");
+        }
         for (Artifact artifact : artifacts) {
             FilePath artifactFilePath = new FilePath(workspace, build.getEnvironment(listener).expand(artifact.getFile()));
             if (!artifactFilePath.exists()) {
