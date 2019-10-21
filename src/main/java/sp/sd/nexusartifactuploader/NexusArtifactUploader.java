@@ -2,14 +2,13 @@ package sp.sd.nexusartifactuploader;
 
 import hudson.*;
 import hudson.model.*;
+import hudson.remoting.Callable;
 import hudson.security.ACL;
 import hudson.tasks.BuildStepDescriptor;
 import hudson.tasks.Builder;
 import hudson.util.FormValidation;
 import hudson.util.Secret;
 import hudson.util.ListBoxModel;
-import hudson.remoting.VirtualChannel;
-import jenkins.MasterToSlaveFileCallable;
 import jenkins.tasks.SimpleBuildStep;
 import org.kohsuke.stapler.AncestorInPath;
 import org.kohsuke.stapler.DataBoundConstructor;
@@ -18,8 +17,11 @@ import org.kohsuke.stapler.QueryParameter;
 import java.io.File;
 import java.io.IOException;
 import java.io.Serializable;
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import javax.annotation.CheckForNull;
 import javax.annotation.Nullable;
 
@@ -137,83 +139,50 @@ public class NexusArtifactUploader extends Builder implements SimpleBuildStep, S
     }
 
     @Override
-    public void perform(Run build, FilePath workspace, Launcher launcher, TaskListener listener) throws IOException, InterruptedException {
-        boolean result = false;
+    public void perform(Run build, FilePath workspace, Launcher launcher, final TaskListener listener) throws IOException, InterruptedException {
         EnvVars envVars = build.getEnvironment(listener);
         Item project = build.getParent();
+        final String username = getUsername(envVars, project);
+        final String password = getPassword(envVars, project);
+        final String nexusUrl = envVars.expand(getNexusUrl());
+        final String repository = envVars.expand(getRepository());
+
         if (artifacts == null || artifacts.size() == 0) {
             throw new IOException("No artifacts defined. Artifacts must be defined in addition to group id. See https://plugins.jenkins.io/nexus-artifact-uploader");
         }
-        for (Artifact artifact : artifacts) {
+
+        final Map<Artifact, String> artifacts = new LinkedHashMap<Artifact, String>();
+        for (Artifact artifact : this.artifacts) {
             FilePath artifactFilePath = new FilePath(workspace, build.getEnvironment(listener).expand(artifact.getFile()));
-            if (!artifactFilePath.exists()) {
-                listener.getLogger().println(artifactFilePath.getName() + " file doesn't exists");
-                throw new IOException(artifactFilePath.getName() + " file doesn't exists");
-            } else {
-                result = artifactFilePath.act(new ArtifactFileCallable(listener,
-                        this.getUsername(envVars, project),
-                        this.getPassword(envVars, project),
-                        envVars.expand(nexusUrl),
-                        envVars.expand(groupId),
-                        envVars.expand(artifact.getArtifactId()),
-                        envVars.expand(version),
-                        envVars.expand(repository),
-                        envVars.expand(artifact.getType()),
-                        envVars.expand(artifact.getClassifier()),
-                        protocol,
-                        nexusVersion
-                ));
+            artifacts.put(artifact, artifactFilePath.getRemote());
+        }
+
+        workspace.act(new Callable<Boolean, IOException>() {
+            private static final long serialVersionUID = 1L;
+
+            @Override
+            public Boolean call() throws IOException {
+                final List<org.sonatype.aether.artifact.Artifact> nexusArtifacts = new ArrayList<org.sonatype.aether.artifact.Artifact>(artifacts.size());
+                for (final Map.Entry<Artifact, String> entry : artifacts.entrySet()) {
+                    Artifact artifact = entry.getKey();
+                    File file = new File(entry.getValue());
+                    if (!file.exists()) {
+                        listener.getLogger().println(file.getName() + " file doesn't exists");
+                        throw new IOException(file.getName() + " file doesn't exists");
+                    } else {
+                        nexusArtifacts.add(Utils.toArtifact(artifact, groupId, version, file));
+                    }
+                }
+                return Utils.uploadArtifacts(listener, username, password,
+                        nexusUrl, repository, protocol, nexusVersion,
+                        nexusArtifacts.toArray(new org.sonatype.aether.artifact.Artifact[0]));
             }
-            if (!result) {
-                throw new AbortException("Uploading file " + artifactFilePath.getName() + " failed.");
+
+            @Override
+            public void checkRoles(RoleChecker checker) throws SecurityException {
+
             }
-        }
-    }
-
-    private static final class ArtifactFileCallable extends MasterToSlaveFileCallable<Boolean> {
-
-        private final TaskListener listener;
-        private final String resolvedNexusUser;
-        private final String resolvedNexusPassword;
-        private final String resolvedNexusUrl;
-        private final String resolvedGroupId;
-        private final String resolvedArtifactId;
-        private final String resolvedVersion;
-        private final String resolvedRepository;
-        private final String resolvedType;
-        private final String resolvedClassifier;
-        private final String resolvedProtocol;
-        private final String resolvedNexusVersion;
-
-        public ArtifactFileCallable(TaskListener Listener, String ResolvedNexusUser, String ResolvedNexusPassword, String ResolvedNexusUrl,
-                                    String ResolvedGroupId, String ResolvedArtifactId, String ResolvedVersion,
-                                    String ResolvedRepository, String ResolvedType, String ResolvedClassifier,
-                                    String ResolvedProtocol, String ResolvedNexusVersion) {
-            this.listener = Listener;
-            this.resolvedNexusUser = ResolvedNexusUser;
-            this.resolvedNexusPassword = ResolvedNexusPassword;
-            this.resolvedNexusUrl = ResolvedNexusUrl;
-            this.resolvedGroupId = ResolvedGroupId;
-            this.resolvedArtifactId = ResolvedArtifactId;
-            this.resolvedVersion = ResolvedVersion;
-            this.resolvedRepository = ResolvedRepository;
-            this.resolvedType = ResolvedType;
-            this.resolvedClassifier = ResolvedClassifier;
-            this.resolvedProtocol = ResolvedProtocol;
-            this.resolvedNexusVersion = ResolvedNexusVersion;
-        }
-
-        @Override
-        public Boolean invoke(File artifactFile, VirtualChannel channel) throws IOException {
-            return Utils.uploadArtifact(artifactFile, listener, resolvedNexusUser, resolvedNexusPassword, resolvedNexusUrl,
-                    resolvedGroupId, resolvedArtifactId, resolvedVersion, resolvedRepository, resolvedType, resolvedClassifier,
-                    resolvedProtocol, resolvedNexusVersion);
-        }
-
-        @Override
-        public void checkRoles(RoleChecker checker) throws SecurityException {
-
-        }
+        });
     }
 
     @Override
