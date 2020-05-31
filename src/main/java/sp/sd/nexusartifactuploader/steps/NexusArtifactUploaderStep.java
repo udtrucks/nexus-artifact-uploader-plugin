@@ -245,7 +245,7 @@ public final class NexusArtifactUploaderStep extends AbstractStepImpl {
             final String protocol = step.getProtocol();
             final String nexusVersion = step.getNexusVersion();
             final String groupId = step.getGroupId();
-            final String version = step.getVersion();
+            final String version = envVars.expand(step.getVersion());
             final TaskListener listener = this.listener;
 
             final Map<Artifact, String> artifacts = new LinkedHashMap<Artifact, String>();

@@ -146,6 +146,7 @@ public class NexusArtifactUploader extends Builder implements SimpleBuildStep, S
         final String password = getPassword(envVars, project);
         final String nexusUrl = envVars.expand(getNexusUrl());
         final String repository = envVars.expand(getRepository());
+        final String expandedVersion = envVars.expand(getVersion());
 
         if (artifacts == null || artifacts.size() == 0) {
             throw new IOException("No artifacts defined. Artifacts must be defined in addition to group id. See https://plugins.jenkins.io/nexus-artifact-uploader");
@@ -170,7 +171,7 @@ public class NexusArtifactUploader extends Builder implements SimpleBuildStep, S
                         listener.getLogger().println(file.getName() + " file doesn't exists");
                         throw new IOException(file.getName() + " file doesn't exists");
                     } else {
-                        nexusArtifacts.add(Utils.toArtifact(artifact, groupId, version, file));
+                        nexusArtifacts.add(Utils.toArtifact(artifact, groupId, expandedVersion, file));
                     }
                 }
                 return Utils.uploadArtifacts(listener, username, password,
