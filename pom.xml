@@ -20,7 +20,7 @@
 
     <name>Nexus Artifact Uploader</name>
     <description>Nexus Artifact Uploader is to upload artifact to Nexus Repo</description>
-    <url>https://wiki.jenkins-ci.org/display/JENKINS/Nexus+Artifact+Uploader</url>
+    <url>https://repo.jenkins-ci.org/artifactory/JENKINS-61937/</url>
 
     <licenses>
         <license>
