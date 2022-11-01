@@ -1,1 +1,15 @@
-nexusArtifactUploader artifacts: [[artifactId: 'newproject', classifier: '', file: '\'my-service-\' + version + \'.jar\'', type: 'jar']], credentialsId: '58a314b6-e05b-47bd-9870-c8b17a2bf5e3', groupId: 'com.example', nexusUrl: 'http://10.180.97.196:8081/', nexusVersion: 'nexus2', protocol: 'http', repository: 'vvk_new', version: 'vvk_new'
+nexusArtifactUploader(
+    nexusVersion: 'nexus3',
+    protocol: 'http',
+    nexusUrl: 'http://10.180.97.196:8081/',
+    groupId: 'com.example',
+    version: '1.0.1.00',
+    repository: 'vvk_new',
+    credentialsId: 'CredentialsId',
+    artifacts: [
+        [artifactId: Newproject,
+         classifier: '',
+         file: 'my-service-' + version + '.jar',
+         type: 'jar']
+    ]
+ )
